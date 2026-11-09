@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { decideHour, makePlan, toBlocks, summarize } from '../src/engine.js';
+import { decideHour, makePlan, toBlocks, summarize, bestAirHour } from '../src/engine.js';
 
 const hour = (over) => ({
   time: '2026-11-09T02:00',
@@ -75,5 +75,28 @@ describe('toBlocks', () => {
     const blocks = toBlocks(plan);
     expect(blocks.reduce((n, b) => n + b.hours, 0)).toBe(24);
     for (let i = 1; i < blocks.length; i++) expect(blocks[i].open).not.toBe(blocks[i - 1].open);
+  });
+});
+
+describe('bestAirHour', () => {
+  it('picks the cleanest dry hour', () => {
+    const plan = makePlan([
+      hour({ time: '2026-11-09T01:00', aqi: 190 }),
+      hour({ time: '2026-11-09T02:00', aqi: 120, rainProb: 90 }),
+      hour({ time: '2026-11-09T03:00', aqi: 150 }),
+    ]);
+    expect(bestAirHour(plan).time).toBe('2026-11-09T03:00');
+  });
+
+  it('prefers hourly PM2.5 over the slow-moving AQI', () => {
+    const plan = makePlan([
+      hour({ time: '2026-11-09T01:00', aqi: 180, pm25: 120 }),
+      hour({ time: '2026-11-09T02:00', aqi: 180, pm25: 60 }),
+    ]);
+    expect(bestAirHour(plan).time).toBe('2026-11-09T02:00');
+  });
+
+  it('returns null without air data', () => {
+    expect(bestAirHour(makePlan([hour({ aqi: null })]))).toBeNull();
   });
 });

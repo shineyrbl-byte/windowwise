@@ -106,7 +106,21 @@ export function summarize(plan) {
     openHours,
     now: plan[0],
     nextChange: nextChange === -1 ? null : plan[nextChange],
+    airHours: plan.filter((h) => h.reason === 'air').length,
+    bestAir: bestAirHour(plan),
   };
+}
+
+// On bad-air days the plan may never open the window. Rooms still need
+// some fresh air, so find the least-polluted dry hour to air out briefly.
+// US AQI is a 24-hour average and barely moves hour to hour, so rank by
+// hourly PM2.5 when we have it.
+export function bestAirHour(plan) {
+  const usePm = plan.some((h) => h.pm25 != null);
+  const key = usePm ? 'pm25' : 'aqi';
+  const candidates = plan.filter((h) => h[key] != null && h.reason !== 'rain');
+  if (!candidates.length) return null;
+  return candidates.reduce((best, h) => (h[key] < best[key] ? h : best));
 }
 
 export const round = (n) => Math.round(n * 10) / 10;
