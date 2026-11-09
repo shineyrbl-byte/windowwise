@@ -1,12 +1,12 @@
-# Syllacal
+# WindowWise
 
-Paste a syllabus, get every deadline in your calendar, and see your crunch weeks coming.
+Know when to open your windows. WindowWise reads the local forecast and air quality and gives you an hour-by-hour plan that cools your room for free and keeps polluted air out.
 
-Built for [LaunchPad Hacks](https://devpost.com/) (October 16 – November 20, 2026).
+Built for LaunchPad Hacks (October 16 – November 20, 2026).
 
 ## The problem
 
-At the start of every term, students get a syllabus for each course, often as a PDF or a long web page. The deadlines are buried in paragraphs and tables. Copying them into a calendar by hand is slow and easy to get wrong, so many students skip it, and they only notice that three exams land in the same week when that week arrives.
+Millions of students live in hostels, PGs and shared flats without air conditioning. Opening the windows at the right time is the cheapest way to cool a room. At the wrong time, it lets in hot afternoon air, rain, or smoke and PM2.5 on high-pollution days. Weather apps show temperature and AQI on separate screens, and none of them answer the simple question: *should my window be open right now, and when should I change it?*
 
 ## Status
 
