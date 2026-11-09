@@ -16,8 +16,11 @@ const OPEN_MIX = 0.5;
 const CLOSED_MIX = 0.08;
 const SUN_GAIN = 0.35; // °C per daytime hour
 
+// Times look like "2026-11-09T14:00" in the place's own timezone,
+// so read the hour from the string instead of the browser's clock.
+export const hourOf = (time) => Number(time.slice(11, 13));
 const isDaytime = (time) => {
-  const h = new Date(time).getHours();
+  const h = hourOf(time);
   return h >= 9 && h < 18;
 };
 
