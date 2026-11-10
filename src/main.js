@@ -395,7 +395,7 @@ async function choose(place, quiet = false) {
     lastSeries = series;
     updateCalibration();
     const noPollen = state.settings.pollenAllergy && !hours.some((h) => h.pollen);
-    if (offline) status('offline', { time: new Date(savedAt).toLocaleString([], { weekday: 'short', hour: '2-digit', minute: '2-digit' }) });
+    if (offline) status('offline', { time: new Date(savedAt).toLocaleString(LOCALES[getLang()] || [], { weekday: 'short', hour: '2-digit', minute: '2-digit' }) });
     else if (!hasAir) status('no_air');
     else if (noPollen) status('no_pollen');
     else status(null);

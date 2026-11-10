@@ -33,7 +33,20 @@ Weather apps show temperature and AQI on separate screens. None of them answer t
 9. **Calibrate to your room:** log a few thermometer readings and WindowWise tunes its room model to how your room actually behaves.
 10. **Pollen alerts:** with the pollen allergy setting on, the window stays shut during high-pollen hours (where pollen data exists: Europe).
 11. **Hostel mode:** share the plan by link with everyone on your floor, or print a notice for the noticeboard.
-12. **हिन्दी:** the whole interface, including reasons and notifications, is available in Hindi.
+12. **7 languages:** English, हिन्दी, मराठी, বাংলা, தமிழ், తెలుగు and ಕನ್ನಡ, including reasons, notifications and dates.
+13. **Tonight:** one answer before bed, for example "Sleep with the window open from 22:00 to 06:00".
+14. **7-day outlook:** temperature range, worst AQI, rain and wind, open hours and the best night window for each day.
+15. **Wind, clouds and rain:** closes for strong gusts; cloud cover reduces sun heating in the room model.
+16. **Cross-ventilation and curtains:** windows on two sides air the room faster; a curtain tip says when to block the sun (only when the room is warm).
+17. **Damp/monsoon mode:** opens when outside air is drier, to dry out a damp room, and closes when it's humid.
+18. **Cold days:** when it's too cold to open, the app suggests the warmest hour to air out for a few minutes.
+19. **AC savings:** hours of AC the plan avoids, with kWh, money (your electricity price) and CO₂.
+20. **Saved places:** home, hostel and more, each with its own room settings.
+21. **Room log and Bluetooth:** a chart of your thermometer readings against outdoor temperature, and reading from Bluetooth thermometers that use the standard Environmental Sensing service.
+22. **Installable and offline:** app icons, an install button, and the last forecast saved for offline use.
+23. **Accessibility:** high contrast, larger text, read-aloud and a simple view with just the answer.
+24. **Embeddable widget:** one line of code puts a live WindowWise card on a hostel or college website.
+25. **Smart-home webhook:** call IFTTT, Home Assistant or similar when it's time to open or close.
 
 ## How it decides
 
@@ -42,8 +55,10 @@ Each hour is checked in this order:
 | Check | Window |
 | --- | --- |
 | Rain chance ≥ 60% | Closed |
+| Wind gusts ≥ 50 km/h | Closed |
 | US AQI above your limit (100, or 50 if sensitive) | Closed |
 | Pollen is high and you have a pollen allergy | Closed |
+| Damp mode: outside humidity ≥ 85% / ≤ 65% | Closed / **Open** to dry the room |
 | Outside is colder than your comfort range | Closed |
 | Outside is at least 1°C cooler than the room | **Open** (unless it's above your comfort range *and* ≥ 90% humid) |
 | Outside is at least 1°C hotter than the room | Closed |
@@ -55,7 +70,9 @@ The room temperature is simulated hour by hour:
 room(next hour) = room + k × (outside − room) + sun
 ```
 
-`k` is 0.5 with the window open (0.65 with a fan) and 0.08 with it closed. `sun` is the heat a closed room gains from direct sun in that hour, and depends on when your window gets sun. The same model runs for "window always shut", which gives the comparison in the chart.
+`k` is 0.5 with the window open (0.75 with cross-ventilation, plus 0.15 with a fan) and 0.08 with it closed. `sun` is the heat a closed room gains from direct sun in that hour. It depends on when your window gets sun, drops by up to 70% under full cloud, and halves with curtains closed.
+
+AC savings count the hours the room would be above your comfort limit with the window shut, minus the hours it still is with the plan, times your AC's power use (1.2 kWh per hour by default) and electricity price. CO₂ uses India's grid average of 0.71 kg per kWh. The same model runs for "window always shut", which gives the comparison in the chart.
 
 ### Calibration
 
@@ -74,21 +91,27 @@ _Add screenshots of the main screen, the hour strip and the chart here._
 - Plain JavaScript, HTML and CSS, built with [Vite](https://vitejs.dev/), with no frameworks
 - [Open-Meteo](https://open-meteo.com/) Forecast, Air Quality (including pollen) and Geocoding APIs (free, no API key)
 - Hand-drawn inline SVG chart
-- Notifications API, a service worker and a web app manifest (installable)
-- Web Share API and print styles for hostel mode
-- 45 [Vitest](https://vitest.dev/) unit tests: decision rules, room model, calibration, data merging, reminders, share links and translations
+- Notifications API, a service worker (offline cache) and a web app manifest (installable)
+- Web Share API, Clipboard API and print styles for hostel mode; an iframe widget
+- Web Bluetooth (Environmental Sensing service) and the Web Speech API
+- Languages load on demand with dynamic imports
+- 63 [Vitest](https://vitest.dev/) unit tests: decision rules, room model, calibration, summaries, data merging, reminders, webhooks, share links, and a check that every language has every string
 - GitHub Actions runs the tests, builds and deploys to GitHub Pages on every push
 
 ```
-src/engine.js     decision rules, room model, sun/fan, pollen, summary
+src/engine.js     decision rules, room model, summaries (tonight, week, AC savings...)
 src/calibrate.js  fitting the room model to thermometer readings
 src/data.js       Open-Meteo fetching and hourly merge
 src/notify.js     reminder scheduling and notifications
+src/webhook.js    smart-home webhook
 src/share.js      hostel share links
-src/i18n.js       English and Hindi text
-src/chart.js      SVG temperature chart
+src/i18n.js       English text and language loading
+src/locales/      Hindi, Marathi, Bengali, Tamil, Telugu, Kannada
+src/format.js     shared text helpers
+src/chart.js      SVG charts
 src/main.js       interface
-public/sw.js      service worker for notifications
+src/embed.js      embeddable widget (embed.html)
+public/sw.js      service worker: notifications and offline cache
 test/             unit tests
 ```
 
@@ -114,7 +137,11 @@ No API keys or accounts are needed.
 - **AQI is modelled data** from Open-Meteo (CAMS), not a sensor on your street. It can differ from local readings.
 - **US AQI is a 24-hour average,** so it changes slowly. The least-polluted-hour tip uses hourly PM2.5 for this reason.
 - **Pollen data covers Europe only.** Elsewhere the pollen setting has no effect, and the app says so.
-- **The Hindi translation** was written with AI help and should be reviewed by a native speaker.
+- **Translations** were written with AI help and should be reviewed by native speakers.
+- **Bluetooth** only works with thermometers that use the standard Environmental Sensing service, in Chrome or Edge (not iPhone or Firefox). I couldn't test it with real hardware.
+- **AC savings are rough:** they assume a typical 1.5-ton AC; set your own power use and price in settings.
+- **The smart-home webhook** fires from the device, like reminders, so the app must be open or installed.
+- **Air-quality forecasts** run about 5 days ahead, so the last days of the outlook show no AQI.
 - WindowWise is a guide, not medical advice. On bad-air days, follow local health guidance.
 
 ## What I learned
@@ -126,9 +153,10 @@ No API keys or accounts are needed.
 ## Not built (and why)
 
 - **Notifications when the app is fully closed** need a push server, and GitHub Pages can't run one.
-- **Bluetooth room sensors:** cheap sensors don't share a common data format, and Web Bluetooth doesn't work on iPhone or Firefox. Thermometer readings give the same calibration benefit without hardware.
 - **Live ground sensors (CPCB, OpenAQ):** these need an API key, and a key can't be kept secret in a site with no server.
-- **More regional languages:** the text lives in one dictionary file (`src/i18n.js`), so adding Marathi, Tamil, Kannada or others means translating one file.
+- **A live shared hostel plan** (a warden changes it once, everyone updates) and **community room readings** need a database.
+- **WhatsApp or Telegram reminders** need a bot account and a server to send messages while the app is closed.
+- **Other Bluetooth sensors:** many cheap thermometers use their own private formats instead of the standard one.
 
 ## Credits
 
