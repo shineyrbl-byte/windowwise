@@ -7,7 +7,7 @@ export function upcomingChanges(plan) {
   const out = [];
   for (let i = 1; i < plan.length; i++) {
     if (plan[i].open !== plan[i - 1].open) {
-      out.push({ time: plan[i].time, open: plan[i].open, text: plan[i].text, reason: plan[i].reason });
+      out.push({ time: plan[i].time, open: plan[i].open, text: plan[i].text, reason: plan[i].reason, hour: plan[i] });
     }
   }
   return out;
@@ -68,8 +68,9 @@ export function createScheduler({ show, now = () => Date.now() }) {
 
 // Show through the service worker when we can: Android Chrome does not allow
 // `new Notification()` from a page, only registration.showNotification().
-export async function showNotification(change, placeName) {
-  const { title, body } = message(change);
+// `msg` lets the interface pass translated text.
+export async function showNotification(change, placeName, msg = message(change)) {
+  const { title, body } = msg;
   const options = {
     body: placeName ? `${placeName}: ${body}` : body,
     tag: 'windowwise-change',

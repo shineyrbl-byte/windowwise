@@ -138,7 +138,7 @@ export function toBlocks(plan) {
       last.end = h.time;
       last.hours += 1;
     } else {
-      blocks.push({ open: h.open, reason: h.reason, text: h.text, start: h.time, end: h.time, hours: 1 });
+      blocks.push({ open: h.open, reason: h.reason, text: h.text, start: h.time, end: h.time, hours: 1, first: h });
     }
   }
   return blocks;

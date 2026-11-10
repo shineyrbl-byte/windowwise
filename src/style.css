@@ -213,3 +213,7 @@ button.ghost { background: transparent; color: var(--accent); }
   .blocks li { font-size: 14pt; }
   .strip li.o { background: #0a7a52 !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
 }
+
+/* language switch */
+.brand-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.lang select { padding: 6px 10px; font-size: 0.9rem; }

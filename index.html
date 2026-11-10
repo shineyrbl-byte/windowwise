@@ -11,77 +11,82 @@
     <link rel="apple-touch-icon" href="icon.svg" />
   </head>
   <body>
-    <a class="skip" href="#main">Skip to content</a>
+    <a class="skip" href="#main" data-i18n="skip">Skip to content</a>
     <header class="top">
       <div class="wrap">
-        <p class="brand"><span class="logo" aria-hidden="true"></span>WindowWise</p>
-        <p class="tagline">Know when to open your windows: cool your room for free, keep bad air out.</p>
+        <div class="brand-row">
+          <p class="brand"><span class="logo" aria-hidden="true"></span>WindowWise</p>
+          <label class="lang"><span class="sr-only" data-i18n="language">Language</span>
+            <select id="lang" aria-label="Language / भाषा"></select>
+          </label>
+        </div>
+        <p class="tagline" data-i18n="tagline">Know when to open your windows: cool your room for free, keep bad air out.</p>
       </div>
     </header>
 
     <main id="main" class="wrap">
       <section class="card place" aria-labelledby="place-h">
-        <h2 id="place-h" class="sr-only">Choose a place</h2>
+        <h2 id="place-h" class="sr-only" data-i18n="choose_place">Choose a place</h2>
         <form id="search" class="search" role="search">
-          <label for="q" class="sr-only">City or town</label>
-          <input id="q" type="search" placeholder="Search your city or town" autocomplete="off" />
-          <button type="submit">Search</button>
-          <button type="button" id="locate" class="ghost">Use my location</button>
+          <label for="q" class="sr-only" data-i18n="city_label">City or town</label>
+          <input id="q" type="search" data-i18n-ph="search_ph" placeholder="Search your city or town" autocomplete="off" />
+          <button type="submit" data-i18n="search">Search</button>
+          <button type="button" id="locate" class="ghost" data-i18n="locate">Use my location</button>
         </form>
         <ul id="results" class="results" hidden></ul>
       </section>
 
       <details class="card settings">
-        <summary>Your room &amp; preferences</summary>
+        <summary data-i18n="settings">Your room &amp; preferences</summary>
         <div class="fields">
-          <label>Room temperature now (°C, optional)
-            <input id="startIndoor" type="number" step="0.5" min="0" max="50" placeholder="Estimate" />
+          <label><span data-i18n="start_indoor">Room temperature now (°C, optional)</span>
+            <input id="startIndoor" type="number" step="0.5" min="0" max="50" data-i18n-ph="estimate" placeholder="Estimate" />
           </label>
-          <label>Keep the room under (°C)
+          <label><span data-i18n="comfort_max">Keep the room under (°C)</span>
             <input id="comfortMax" type="number" step="0.5" min="15" max="40" />
           </label>
-          <label>Too cold below (°C)
+          <label><span data-i18n="comfort_min">Too cold below (°C)</span>
             <input id="comfortMin" type="number" step="0.5" min="0" max="30" />
           </label>
-          <label>When does your window get direct sun?
+          <label><span data-i18n="sun_q">When does your window get direct sun?</span>
             <select id="sun">
-              <option value="unsure">Not sure</option>
-              <option value="morning">Morning (faces east)</option>
-              <option value="afternoon">Afternoon (faces west)</option>
-              <option value="allday">Most of the day</option>
-              <option value="shade">Hardly ever (shaded)</option>
+              <option value="unsure" data-i18n="sun_unsure">Not sure</option>
+              <option value="morning" data-i18n="sun_morning">Morning (faces east)</option>
+              <option value="afternoon" data-i18n="sun_afternoon">Afternoon (faces west)</option>
+              <option value="allday" data-i18n="sun_allday">Most of the day</option>
+              <option value="shade" data-i18n="sun_shade">Hardly ever (shaded)</option>
             </select>
           </label>
           <label class="check">
             <input id="fan" type="checkbox" />
-            I have a fan running
+            <span data-i18n="fan">I have a fan running</span>
           </label>
           <label class="check">
             <input id="sensitive" type="checkbox" />
-            Asthma, allergies or sensitive lungs (stricter air limit, AQI 50)
+            <span data-i18n="sensitive">Asthma, allergies or sensitive lungs (stricter air limit, AQI 50)</span>
           </label>
           <label class="check">
             <input id="pollenAllergy" type="checkbox" />
-            Pollen allergy (keep the window shut when pollen is high; pollen data covers Europe only)
+            <span data-i18n="pollen_allergy">Pollen allergy (keep the window shut when pollen is high; pollen data covers Europe only)</span>
           </label>
         </div>
       </details>
 
       <details class="card calib">
-        <summary>Calibrate to your room (optional)</summary>
-        <p class="small">Have a thermometer? Log your room temperature a few times over a day or two, at least an hour apart. WindowWise compares your readings with the real outdoor weather for those hours and tunes its model to how your room behaves.</p>
+        <summary data-i18n="calib_title">Calibrate to your room (optional)</summary>
+        <p class="small" data-i18n="calib_help"></p>
         <form id="calib-form" class="fields">
-          <label>Room temperature now (°C)
+          <label><span data-i18n="calib_temp">Room temperature now (°C)</span>
             <input id="calibTemp" type="number" step="0.1" min="0" max="50" required />
           </label>
-          <label>Since your last reading, the window was
+          <label><span data-i18n="calib_since">Since your last reading, the window was</span>
             <select id="calibOpen">
-              <option value="closed">Mostly closed</option>
-              <option value="open">Mostly open</option>
+              <option value="closed" data-i18n="calib_closed">Mostly closed</option>
+              <option value="open" data-i18n="calib_open">Mostly open</option>
             </select>
           </label>
-          <div class="row"><button type="submit">Log reading</button>
-          <button type="button" class="ghost" id="calib-reset">Reset</button></div>
+          <div class="row"><button type="submit" data-i18n="calib_log">Log reading</button>
+          <button type="button" class="ghost" id="calib-reset" data-i18n="reset">Reset</button></div>
         </form>
         <p id="calib-status" class="small" aria-live="polite"></p>
       </details>
@@ -91,7 +96,7 @@
     </main>
 
     <footer class="wrap foot">
-      <p>Weather and air quality from <a href="https://open-meteo.com/">Open-Meteo</a> (CC BY 4.0). The room temperature is a simple estimate, not a measurement. Use it as a guide, and follow local health advice on bad-air days.</p>
+      <p id="footer-text"></p>
     </footer>
     <script type="module" src="/src/main.js"></script>
   </body>

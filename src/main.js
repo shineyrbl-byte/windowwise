@@ -3,8 +3,9 @@ import { searchPlaces, fetchHours } from './data.js';
 import { DEFAULT_SETTINGS, FAN_FEELS_COOLER, pollenRisk, makePlan, toBlocks, summarize, hourOf, round } from './engine.js';
 import { renderChart } from './chart.js';
 import { toQuery, fromQuery } from './share.js';
-import { calibrate, describe as describeRoom } from './calibrate.js';
+import { calibrate, describeKeys } from './calibrate.js';
 import { createScheduler, notifySupport, showNotification } from './notify.js';
+import { t, setLang, getLang, LANGS } from './i18n.js';
 
 const $ = (id) => document.getElementById(id);
 const STORE = 'windowwise:v1';
@@ -18,6 +19,7 @@ if (shared) {
   state.sensitive = shared.sensitive;
   history.replaceState(null, '', location.pathname);
 }
+setLang(state.lang || (navigator.language || '').slice(0, 2));
 
 let lastHours = null;
 let lastOffset = 0;
@@ -25,7 +27,11 @@ let lastSeries = [];
 let calibration = null;
 let lastPlan = null;
 let refreshTimer = null;
-const scheduler = createScheduler({ show: showNotification });
+let statusKey = null; // so status messages can be re-translated
+
+const notifyChange = (change, placeName) =>
+  showNotification(change, placeName, { title: t(change.open ? 'n_open' : 'n_close'), body: `${reasonText(change.hour)}.` });
+const scheduler = createScheduler({ show: notifyChange });
 
 // Needed for notifications on Android and for installing as an app.
 if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});
@@ -48,21 +54,53 @@ function save() {
 
 // ---------- helpers ----------
 const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
-const lowerFirst = (s) => s.charAt(0).toLowerCase() + s.slice(1);
+const lowerFirst = (s) => (getLang() === 'en' ? s.charAt(0).toLowerCase() + s.slice(1) : s);
 const clock = (time) => `${String(hourOf(time)).padStart(2, '0')}:00`;
-const dayLabel = (time, first) => (time.slice(0, 10) === first.slice(0, 10) ? '' : ' tomorrow');
-const status = (msg, isError = false) => {
-  $('status').textContent = msg;
+const dayLabel = (time, first) => (time.slice(0, 10) === first.slice(0, 10) ? '' : ` ${t('tomorrow')}`);
+const when = (time, first) => `${clock(time)}${dayLabel(time, first)}`;
+const strong = (s) => `<strong>${s}</strong>`;
+const isMine = (p) => p.mine || p.name === 'Your location';
+const placeName = (p) => (isMine(p) ? t('your_location') : p.name);
+
+function status(key, vars = {}, isError = false) {
+  statusKey = key ? { key, vars, isError } : null;
+  $('status').textContent = key ? t(key, vars) : '';
   $('status').classList.toggle('error', isError);
-};
+}
 
 function aqiBand(aqi) {
-  if (aqi == null) return { label: 'No data', cls: 'na' };
-  if (aqi <= 50) return { label: 'Good', cls: 'good' };
-  if (aqi <= 100) return { label: 'Moderate', cls: 'ok' };
-  if (aqi <= 150) return { label: 'Unhealthy for sensitive groups', cls: 'warn' };
-  if (aqi <= 200) return { label: 'Unhealthy', cls: 'bad' };
-  return { label: 'Very unhealthy', cls: 'bad' };
+  if (aqi == null) return { label: t('aqi_na'), cls: 'na' };
+  if (aqi <= 50) return { label: t('aqi_good'), cls: 'good' };
+  if (aqi <= 100) return { label: t('aqi_moderate'), cls: 'ok' };
+  if (aqi <= 150) return { label: t('aqi_sensitive'), cls: 'warn' };
+  if (aqi <= 200) return { label: t('aqi_unhealthy'), cls: 'bad' };
+  return { label: t('aqi_very'), cls: 'bad' };
+}
+
+// The engine gives a reason code; the sentence is built here so it can be translated.
+function reasonText(h) {
+  switch (h.reason) {
+    case 'rain':
+      return t('r_rain', { p: h.rainProb });
+    case 'air':
+      return t('r_air', { aqi: h.aqi });
+    case 'pollen': {
+      const risk = pollenRisk(h.pollen);
+      return t('r_pollen', { name: t(`pollen_${risk.type}`), v: Math.round(risk.value) });
+    }
+    case 'cold':
+      return t('r_cold', { t: round(h.temp) });
+    case 'muggy':
+      return t('r_muggy', { h: h.humidity });
+    case 'cool':
+      return t('r_cool', { t: round(h.temp) });
+    case 'heat':
+      return t('r_heat', { t: round(h.temp) });
+    case 'fresh':
+      return t('r_fresh');
+    default:
+      return h.text || '';
+  }
 }
 
 function baseSettings() {
@@ -77,6 +115,36 @@ function settings() {
   return s;
 }
 
+const rerender = () => lastHours && render(lastHours);
+
+// ---------- language ----------
+function applyLanguage() {
+  document.documentElement.lang = getLang();
+  document.querySelectorAll('[data-i18n]').forEach((el) => {
+    el.textContent = t(el.dataset.i18n);
+  });
+  document.querySelectorAll('[data-i18n-ph]').forEach((el) => {
+    el.placeholder = t(el.dataset.i18nPh);
+  });
+  $('footer-text').innerHTML = esc(t('footer')).replace('{link}', '<a href="https://open-meteo.com/">Open-Meteo</a>');
+  if (statusKey) status(statusKey.key, statusKey.vars, statusKey.isError);
+  updateCalibrationText();
+  rerender();
+}
+
+function initLanguage() {
+  const sel = $('lang');
+  sel.innerHTML = Object.entries(LANGS)
+    .map(([code, name]) => `<option value="${code}">${name}</option>`)
+    .join('');
+  sel.value = getLang();
+  sel.addEventListener('change', () => {
+    state.lang = setLang(sel.value);
+    save();
+    applyLanguage();
+  });
+}
+
 // ---------- calibration ----------
 function placeReadings() {
   const p = state.place;
@@ -88,19 +156,24 @@ function placeReadings() {
 }
 
 function updateCalibration() {
+  calibration = lastSeries.length ? calibrate(placeReadings(), lastSeries, baseSettings()) : null;
+  updateCalibrationText();
+}
+
+function updateCalibrationText() {
   const readings = placeReadings();
-  calibration = lastSeries.length ? calibrate(readings, lastSeries, baseSettings()) : null;
   const pairs = calibration ? (calibration.closedPairs || 0) + (calibration.openPairs || 0) : 0;
+  const desc = calibration ? t('room_is', { parts: describeKeys(calibration).map((k) => t(k)).join(', ') }) : '';
   $('calib-status').textContent = !readings.length
-    ? 'No readings yet.'
+    ? t('calib_none')
     : calibration
-      ? `Calibrated from ${readings.length} readings (${pairs} usable ${pairs === 1 ? 'gap' : 'gaps'}). ${describeRoom(calibration)}`
-      : `${readings.length} reading${readings.length === 1 ? '' : 's'} logged. Log another at least an hour after the last one to calibrate.`;
+      ? t('calib_done', { n: readings.length, p: pairs, desc })
+      : t('calib_more', { n: readings.length });
 }
 
 $('calib-form').addEventListener('submit', (e) => {
   e.preventDefault();
-  if (!state.place) return status('Choose a place first, then log your reading.', true);
+  if (!state.place) return status('calib_need_place', {}, true);
   const temp = Number($('calibTemp').value);
   state.readings = [
     ...(state.readings || []),
@@ -109,7 +182,7 @@ $('calib-form').addEventListener('submit', (e) => {
   save();
   $('calibTemp').value = '';
   updateCalibration();
-  if (lastHours) render(lastHours);
+  rerender();
 });
 
 $('calib-reset').addEventListener('click', () => {
@@ -117,7 +190,7 @@ $('calib-reset').addEventListener('click', () => {
   state.readings = (state.readings || []).filter((r) => !p || Math.abs(r.lat - p.lat) >= 0.05 || Math.abs(r.lon - p.lon) >= 0.05);
   save();
   updateCalibration();
-  if (lastHours) render(lastHours);
+  rerender();
 });
 
 // ---------- settings form ----------
@@ -129,32 +202,28 @@ function initSettings() {
       const v = input.value === '' ? null : Number(input.value);
       state.settings[key] = v ?? (key === 'startIndoor' ? null : DEFAULT_SETTINGS[key]);
       save();
-      if (lastHours) render(lastHours);
+      rerender();
     });
   }
   $('sun').value = state.settings.sun || 'unsure';
   $('sun').addEventListener('change', (e) => {
     state.settings.sun = e.target.value;
     save();
-    if (lastHours) render(lastHours);
+    rerender();
   });
-  $('fan').checked = !!state.settings.fan;
-  $('fan').addEventListener('change', (e) => {
-    state.settings.fan = e.target.checked;
-    save();
-    if (lastHours) render(lastHours);
-  });
-  $('pollenAllergy').checked = !!state.settings.pollenAllergy;
-  $('pollenAllergy').addEventListener('change', (e) => {
-    state.settings.pollenAllergy = e.target.checked;
-    save();
-    if (lastHours) render(lastHours);
-  });
-  $('sensitive').checked = state.sensitive;
+  for (const key of ['fan', 'pollenAllergy']) {
+    $(key).checked = !!state.settings[key];
+    $(key).addEventListener('change', (e) => {
+      state.settings[key] = e.target.checked;
+      save();
+      rerender();
+    });
+  }
+  $('sensitive').checked = !!state.sensitive;
   $('sensitive').addEventListener('change', (e) => {
     state.sensitive = e.target.checked;
     save();
-    if (lastHours) render(lastHours);
+    rerender();
   });
 }
 
@@ -164,9 +233,10 @@ $('search').addEventListener('submit', async (e) => {
   const q = $('q').value;
   const list = $('results');
   try {
-    status('Searching…');
+    status('searching');
     const places = await searchPlaces(q);
-    status(places.length ? '' : `No places found for “${q}”.`);
+    if (places.length) status(null);
+    else status('no_places', { q });
     list.innerHTML = places
       .map((p, i) => `<li><button type="button" data-i="${i}">${esc(p.name)} <span>${esc(p.region)}</span></button></li>`)
       .join('');
@@ -178,16 +248,16 @@ $('search').addEventListener('submit', async (e) => {
       choose(places[Number(btn.dataset.i)]);
     };
   } catch {
-    status('Could not search right now. Check your connection and try again.', true);
+    status('search_err', {}, true);
   }
 });
 
 $('locate').addEventListener('click', () => {
-  if (!navigator.geolocation) return status('Your browser does not share location. Search instead.', true);
-  status('Finding you…');
+  if (!navigator.geolocation) return status('no_geo', {}, true);
+  status('finding');
   navigator.geolocation.getCurrentPosition(
-    (pos) => choose({ name: 'Your location', region: '', lat: round(pos.coords.latitude), lon: round(pos.coords.longitude) }),
-    () => status('Location was blocked. Search for your city instead.', true),
+    (pos) => choose({ name: 'Your location', mine: true, region: '', lat: round(pos.coords.latitude), lon: round(pos.coords.longitude) }),
+    () => status('geo_blocked', {}, true),
     { timeout: 10000 },
   );
 });
@@ -195,7 +265,7 @@ $('locate').addEventListener('click', () => {
 async function choose(place, quiet = false) {
   state.place = place;
   save();
-  if (!quiet) status(`Loading the forecast for ${place.name}…`);
+  if (!quiet) status('loading', { place: placeName(place) });
   try {
     const { hours, hasAir, utcOffset, series } = await fetchHours(place.lat, place.lon);
     lastHours = hours;
@@ -203,16 +273,12 @@ async function choose(place, quiet = false) {
     lastSeries = series;
     updateCalibration();
     const noPollen = state.settings.pollenAllergy && !hours.some((h) => h.pollen);
-    status(
-      !hasAir
-        ? 'Air quality data is unavailable here, so the plan uses weather only.'
-        : noPollen
-          ? "Pollen forecasts aren't available for this place (they cover Europe only), so the plan can't account for pollen."
-          : '',
-    );
+    if (!hasAir) status('no_air');
+    else if (noPollen) status('no_pollen');
+    else status(null);
     render(hours);
-  } catch (err) {
-    status(`${err.message}. Please try again in a moment.`, true);
+  } catch {
+    status('load_err', {}, true);
   }
 }
 
@@ -222,57 +288,64 @@ function render(hours) {
   lastPlan = plan;
   const sum = summarize(plan);
   const nextReminder =
-    state.remind && notifySupport() === 'granted' ? scheduler.schedule(plan, lastOffset, state.place.name) : (scheduler.clear(), null);
+    state.remind && notifySupport() === 'granted' ? scheduler.schedule(plan, lastOffset, placeName(state.place)) : (scheduler.clear(), null);
   const blocks = toBlocks(plan);
   const first = plan[0].time;
   const now = sum.now;
   const band = aqiBand(now.aqi);
   const place = state.place;
+  const name = esc(placeName(place));
 
-  const next = sum.nextChange
-    ? `${sum.nextChange.open ? 'Open' : 'Close'} it at <strong>${clock(sum.nextChange.time)}${dayLabel(sum.nextChange.time, first)}</strong>: ${esc(lowerFirst(sum.nextChange.text))}.`
-    : `No change needed for the next ${plan.length} hours.`;
+  const nc = sum.nextChange;
+  const next = nc
+    ? t(nc.open ? 'next_open' : 'next_close', { when: strong(when(nc.time, first)), why: esc(lowerFirst(reasonText(nc))) })
+    : t('no_change', { n: plan.length });
 
   const benefit =
     sum.saved >= 0.5
-      ? `Following this plan, your room should peak around <strong>${sum.peakPlan}°C</strong> instead of <strong>${sum.peakShut}°C</strong> with the window shut. That's <strong>${sum.saved}°C cooler</strong>, with no AC.`
+      ? t('benefit_saved', { plan: strong(`${sum.peakPlan}°C`), shut: strong(`${sum.peakShut}°C`), saved: strong(`${sum.saved}°C`) })
       : sum.openHours === 0
-        ? `Opening the window today wouldn't cool your room, so keeping it shut is the best option.`
-        : `Your room stays around <strong>${sum.peakPlan}°C</strong> at its warmest. Opening the window adds fresh air without warming the room.`;
+        ? t('benefit_none')
+        : t('benefit_fresh', { plan: strong(`${sum.peakPlan}°C`) });
 
-  const fanLine = state.settings.fan
-    ? ` With your fan on, it should feel more like <strong>${round(sum.peakPlan - FAN_FEELS_COOLER)}°C</strong> at its warmest.`
-    : '';
+  const fanLine = state.settings.fan ? ` ${t('fan_line', { t: strong(`${round(sum.peakPlan - FAN_FEELS_COOLER)}°C`) })}` : '';
 
+  const ba = sum.bestAir;
   const airTip =
-    sum.airHours >= 6 && sum.bestAir
+    sum.airHours >= 6 && ba
       ? `<div class="card tip warn-tip">
-          <h3>Bad-air day</h3>
-          <p>The air outside is poor for ${sum.airHours} of the next ${plan.length} hours. Rooms still need some fresh air, so the least-polluted time to air out for 10–15 minutes is
-          <strong>${clock(sum.bestAir.time)}${dayLabel(sum.bestAir.time, first)}</strong>${sum.bestAir.pm25 != null ? ` (PM2.5 ${Math.round(sum.bestAir.pm25)} µg/m³)` : ` (AQI ${sum.bestAir.aqi})`}.</p>
+          <h3>${t('bad_air_title')}</h3>
+          <p>${t('bad_air', {
+            n: sum.airHours,
+            total: plan.length,
+            when: strong(when(ba.time, first)),
+            level: ba.pm25 != null ? ` (PM2.5 ${Math.round(ba.pm25)} µg/m³)` : ` (AQI ${ba.aqi})`,
+          })}</p>
         </div>`
       : '';
 
-  const printedAt = new Date().toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' });
+  const legendExtra = plan.some((h) => h.reason === 'pollen') ? ` <span class="key pollen"></span> ${t('closed_pollen')}` : '';
+  const printedAt = new Date().toLocaleString(getLang() === 'hi' ? 'hi-IN' : [], { dateStyle: 'medium', timeStyle: 'short' });
+
   $('out').innerHTML = `
     <header class="print-only print-head">
-      <h1>Window plan: ${esc(place.name)}</h1>
-      <p>From ${clock(first)} for ${plan.length} hours · made ${esc(printedAt)} with WindowWise</p>
+      <h1>${t('print_title', { place: name })}</h1>
+      <p>${t('print_sub', { from: clock(first), n: plan.length, at: esc(printedAt) })}</p>
     </header>
     <section class="card now ${now.open ? 'is-open' : 'is-closed'}" aria-labelledby="now-h">
-      <p class="where">${esc(place.name)}${place.region ? `, ${esc(place.region)}` : ''} · ${clock(now.time)} local time</p>
+      <p class="where">${name}${place.region ? `, ${esc(place.region)}` : ''} · ${clock(now.time)} ${t('local_time')}</p>
       <h2 id="now-h" class="verdict">
         <span class="icon" aria-hidden="true">${now.open ? windowOpenSvg : windowShutSvg}</span>
-        ${now.open ? 'Open your window' : 'Keep your window closed'}
+        ${t(now.open ? 'verdict_open' : 'verdict_closed')}
       </h2>
-      <p class="why">${esc(now.text)}.</p>
+      <p class="why">${esc(reasonText(now))}.</p>
       <p class="next">${next}</p>
       <dl class="facts">
-        <div><dt>Outside</dt><dd>${round(now.temp)}°C</dd></div>
-        <div><dt>Feels like</dt><dd>${round(now.feels)}°C</dd></div>
-        <div><dt>Humidity</dt><dd>${now.humidity}%</dd></div>
-        <div><dt>Rain chance</dt><dd>${now.rainProb ?? '–'}%</dd></div>
-        <div><dt>Air quality</dt><dd><span class="pill ${band.cls}">${now.aqi ?? '–'} · ${band.label}</span></dd></div>
+        <div><dt>${t('outside')}</dt><dd>${round(now.temp)}°C</dd></div>
+        <div><dt>${t('feels')}</dt><dd>${round(now.feels)}°C</dd></div>
+        <div><dt>${t('humidity')}</dt><dd>${now.humidity}%</dd></div>
+        <div><dt>${t('rain')}</dt><dd>${now.rainProb ?? '–'}%</dd></div>
+        <div><dt>${t('air')}</dt><dd><span class="pill ${band.cls}">${now.aqi ?? '–'} · ${band.label}</span></dd></div>
         ${pollenTile(now)}
       </dl>
     </section>
@@ -280,38 +353,37 @@ function render(hours) {
     <section class="card benefit"><p>${benefit}${fanLine}</p></section>
     ${remindHtml(nextReminder, first)}
     <section class="card share no-print" aria-labelledby="share-h">
-      <h3 id="share-h">Share with your hostel or flat</h3>
-      <p>Send everyone on your floor the same plan, or print a notice for the noticeboard. The link includes this place and your room settings, never your thermometer readings.</p>
+      <h3 id="share-h">${t('share_title')}</h3>
+      <p>${t('share_text')}</p>
       <div class="row">
-        <button type="button" data-act="share">Share plan</button>
-        <button type="button" class="ghost" data-act="print">Print notice</button>
+        <button type="button" data-act="share">${t('share')}</button>
+        <button type="button" class="ghost" data-act="print">${t('print')}</button>
       </div>
     </section>
     ${airTip}
 
     <section class="card" aria-labelledby="plan-h">
-      <h3 id="plan-h">Your next ${plan.length} hours</h3>
-      <ol class="strip" aria-label="Hour by hour">
+      <h3 id="plan-h">${t('next_hours', { n: plan.length })}</h3>
+      <ol class="strip" aria-label="${t('hour_by_hour')}">
         ${plan
-          .map(
-            (h) => `<li class="${h.open ? 'o' : 'c'} r-${h.reason}" title="${clock(h.time)}: ${h.open ? 'open' : 'closed'}. ${esc(h.text)}">
-              <span class="sr-only">${clock(h.time)}: ${h.open ? 'open' : 'closed'}. ${esc(h.text)}.</span>
-            </li>`,
-          )
+          .map((h) => {
+            const label = `${clock(h.time)}: ${t(h.open ? 'open' : 'closed')}. ${esc(reasonText(h))}`;
+            return `<li class="${h.open ? 'o' : 'c'} r-${h.reason}" title="${label}"><span class="sr-only">${label}.</span></li>`;
+          })
           .join('')}
       </ol>
       <div class="strip-axis" aria-hidden="true">
         ${plan.map((h, i) => `<span>${i % 3 === 0 ? clock(h.time).slice(0, 2) : ''}</span>`).join('')}
       </div>
-      <p class="legend"><span class="key o"></span> Open <span class="key c"></span> Closed <span class="key air"></span> Closed: bad air <span class="key rain"></span> Closed: rain${plan.some((h) => h.reason === 'pollen') ? ' <span class="key pollen"></span> Closed: pollen' : ''}</p>
+      <p class="legend"><span class="key o"></span> ${t('open')} <span class="key c"></span> ${t('closed')} <span class="key air"></span> ${t('closed_air')} <span class="key rain"></span> ${t('closed_rain')}${legendExtra}</p>
 
       <ul class="blocks">
         ${blocks
           .map(
             (b) => `<li class="${b.open ? 'o' : 'c'}">
               <span class="when">${clock(b.start)}–${clock(b.end).replace(/:00$/, ':59')}${dayLabel(b.start, first)}</span>
-              <span class="what">${b.open ? 'Open' : 'Closed'}</span>
-              <span class="reason">${esc(b.text)}</span>
+              <span class="what">${t(b.open ? 'open' : 'closed')}</span>
+              <span class="reason">${esc(reasonText(b.first))}</span>
             </li>`,
           )
           .join('')}
@@ -319,12 +391,12 @@ function render(hours) {
     </section>
 
     <section class="card" aria-labelledby="chart-h">
-      <h3 id="chart-h">Room temperature: plan vs. keeping it shut</h3>
-      ${renderChart(plan)}
+      <h3 id="chart-h">${t('chart_title')}</h3>
+      ${renderChart(plan, t('chart_aria', { n: plan.length }))}
       <p class="legend">
-        <span class="line plan"></span> Room with plan
-        <span class="line shut"></span> Room, window shut
-        <span class="line out"></span> Outside
+        <span class="line plan"></span> ${t('line_plan')}
+        <span class="line shut"></span> ${t('line_shut')}
+        <span class="line out"></span> ${t('line_out')}
       </p>
     </section>
   `;
@@ -333,8 +405,8 @@ function render(hours) {
 function pollenTile(h) {
   const risk = pollenRisk(h.pollen);
   if (!risk) return '';
-  const level = risk.ratio >= 1 ? ['High', 'bad'] : risk.ratio >= 0.4 ? ['Moderate', 'warn'] : ['Low', 'good'];
-  return `<div><dt>Pollen</dt><dd><span class="pill ${level[1]}">${level[0]} · ${esc(risk.name)}</span></dd></div>`;
+  const [key, cls] = risk.ratio >= 1 ? ['level_high', 'bad'] : risk.ratio >= 0.4 ? ['level_moderate', 'warn'] : ['level_low', 'good'];
+  return `<div><dt>${t('pollen')}</dt><dd><span class="pill ${cls}">${t(key)} · ${t(`pollen_${risk.type}`)}</span></dd></div>`;
 }
 
 // ---------- reminders ----------
@@ -342,22 +414,20 @@ function remindHtml(next, first) {
   const support = notifySupport();
   let body;
   if (support === 'unsupported') {
-    body = `<p>Your browser doesn't support notifications. Try Chrome, Edge or Firefox, or install WindowWise to your home screen.</p>`;
+    body = `<p>${t('remind_unsupported')}</p>`;
   } else if (support === 'denied') {
-    body = `<p>Notifications are blocked for this site. Allow them in your browser's site settings to get reminders.</p>`;
+    body = `<p>${t('remind_denied')}</p>`;
   } else if (state.remind && support === 'granted') {
-    const when = next
-      ? `Next reminder: <strong>${next.open ? 'open' : 'close'} at ${clock(next.time)}${dayLabel(next.time, first)}</strong>.`
-      : 'No changes in the next 24 hours, so no reminders yet. The plan refreshes every 30 minutes.';
-    body = `<p>🔔 Reminders are on. ${when}</p>
-      <div class="row"><button type="button" class="ghost" data-act="remind-test">Send a test</button>
-      <button type="button" class="ghost" data-act="remind-off">Turn off</button></div>
-      <p class="small">Keep WindowWise open in a tab (it can be in the background) or install it as an app. Reminders can't arrive while it's fully closed.</p>`;
+    const nextLine = next ? t(next.open ? 'remind_next_open' : 'remind_next_close', { when: strong(when(next.time, first)) }) : t('remind_none');
+    body = `<p>${t('remind_on')} ${nextLine}</p>
+      <div class="row"><button type="button" class="ghost" data-act="remind-test">${t('remind_test')}</button>
+      <button type="button" class="ghost" data-act="remind-off">${t('remind_off')}</button></div>
+      <p class="small">${t('remind_note')}</p>`;
   } else {
-    body = `<p>Get a notification when it's time to open or close your window.</p>
-      <div class="row"><button type="button" data-act="remind-on">🔔 Turn on reminders</button></div>`;
+    body = `<p>${t('remind_pitch')}</p>
+      <div class="row"><button type="button" data-act="remind-on">${t('remind_turn_on')}</button></div>`;
   }
-  return `<section class="card remind" aria-labelledby="remind-h"><h3 id="remind-h">Reminders</h3>${body}</section>`;
+  return `<section class="card remind" aria-labelledby="remind-h"><h3 id="remind-h">${t('remind_title')}</h3>${body}</section>`;
 }
 
 function startRefresh() {
@@ -371,41 +441,48 @@ $('out').addEventListener('click', async (e) => {
   if (act === 'remind-on') {
     const perm = await Notification.requestPermission();
     state.remind = perm === 'granted';
-    if (!state.remind) status('Notifications were not allowed, so reminders stay off.', true);
+    if (!state.remind) status('remind_refused', {}, true);
   } else if (act === 'remind-off') {
     state.remind = false;
-  } else if (act === 'share' || act === 'print') {
-    if (act === 'print') return window.print();
+  } else if (act === 'print') {
+    window.print();
+    return;
+  } else if (act === 'share') {
     const url = `${location.origin}${location.pathname}?${toQuery(state.place, state.settings, state.sensitive)}`;
     try {
-      if (navigator.share) await navigator.share({ title: `WindowWise plan for ${state.place.name}`, url });
+      if (navigator.share) await navigator.share({ title: t('share_name', { place: placeName(state.place) }), url });
       else {
         await navigator.clipboard.writeText(url);
-        status('Link copied. Paste it into your hostel group chat.');
+        status('copied');
       }
     } catch (err) {
-      if (err?.name !== 'AbortError') status(`Copy this link: ${url}`);
+      if (err?.name !== 'AbortError') status('copy_this', { url });
     }
     return;
   } else if (act === 'remind-test') {
     const now = lastPlan[0];
-    showNotification({ open: now.open, text: `Test reminder. Right now: ${now.text}` }, state.place.name);
+    showNotification(now, placeName(state.place), {
+      title: t(now.open ? 'n_open' : 'n_close'),
+      body: t('n_test', { why: reasonText(now) }),
+    });
     return;
   }
   save();
   startRefresh();
-  render(lastHours);
+  rerender();
 });
 
 const windowOpenSvg = `<svg viewBox="0 0 48 48" width="44" height="44"><rect x="6" y="5" width="36" height="38" rx="3" fill="none" stroke="currentColor" stroke-width="3"/><path d="M6 5 L20 11 V37 L6 43 Z M42 5 L28 11 V37 L42 43 Z" fill="currentColor" opacity=".25" stroke="currentColor" stroke-width="2.5" stroke-linejoin="round"/></svg>`;
 const windowShutSvg = `<svg viewBox="0 0 48 48" width="44" height="44"><rect x="6" y="5" width="36" height="38" rx="3" fill="currentColor" fill-opacity=".15" stroke="currentColor" stroke-width="3"/><path d="M24 5v38M6 24h36" stroke="currentColor" stroke-width="3"/></svg>`;
 
 // ---------- start ----------
+initLanguage();
 initSettings();
+applyLanguage();
 startRefresh();
 if (state.place) {
-  $('q').value = state.place.name === 'Your location' ? '' : state.place.name;
+  $('q').value = isMine(state.place) ? '' : state.place.name;
   choose(state.place);
 } else {
-  status('Search for your city, or use your location, to get today’s plan.');
+  status('start_hint');
 }

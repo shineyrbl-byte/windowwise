@@ -2,7 +2,7 @@
 // Open hours are shaded so you can see why the lines move.
 import { hourOf } from './engine.js';
 
-export function renderChart(plan) {
+export function renderChart(plan, ariaLabel = `Room temperature over the next ${plan.length} hours.`) {
   const W = 720;
   const H = 240;
   const pad = { l: 36, r: 12, t: 12, b: 26 };
@@ -19,12 +19,7 @@ export function renderChart(plan) {
   const stepT = Math.max(1, Math.round((hi - lo) / 4));
   for (let v = lo; v <= hi; v += stepT) ticks.push(v);
 
-  const label = plan
-    .map((h) => `${hourOf(h.time)}:00 outside ${h.temp.toFixed(0)}, plan ${h.indoorPlan.toFixed(0)}, shut ${h.indoorShut.toFixed(0)}`)
-    .filter((_, i) => i % 6 === 0)
-    .join('; ');
-
-  return `<svg class="chart" viewBox="0 0 ${W} ${H}" role="img" aria-label="Temperature over the next ${n} hours. ${label}.">
+  return `<svg class="chart" viewBox="0 0 ${W} ${H}" role="img" aria-label="${ariaLabel.replace(/"/g, '&quot;')}">
     ${plan
       .map((h, i) =>
         h.open
