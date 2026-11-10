@@ -147,12 +147,14 @@ button.ghost { background: transparent; color: var(--accent); }
 .strip li.o { background: var(--open); }
 .strip li.c { background: var(--closed-soft); }
 .strip li.c.r-air { background: var(--bad-soft); }
+.strip li.c.r-pollen { background: var(--warn-soft); }
 .strip li.c.r-rain { background: repeating-linear-gradient(135deg, var(--closed-soft) 0 4px, var(--line) 4px 8px); }
 .strip-axis { display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; gap: 2px; font-size: 0.75rem; color: var(--muted); }
 .legend { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 14px; font-size: 0.85rem; color: var(--muted); margin: 10px 0 0; }
 .key { display: inline-block; width: 14px; height: 14px; border-radius: 3px; vertical-align: -2px; margin-right: -8px; }
 .key.o { background: var(--open); }
 .key.c { background: var(--closed-soft); border: 1px solid var(--line); }
+.key.pollen { background: var(--warn-soft); border: 1px solid var(--line); }
 .key.air { background: var(--bad-soft); border: 1px solid var(--line); }
 .key.rain { background: repeating-linear-gradient(135deg, var(--closed-soft) 0 3px, var(--line) 3px 6px); }
 

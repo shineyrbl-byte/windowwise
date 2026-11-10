@@ -13,17 +13,19 @@ const weather = {
     wind_speed_10m: [5, 6, 7],
   },
 };
-const air = { hourly: { time: times, us_aqi: [50, 80, 120], pm2_5: [10, 20, 40] } };
+const air = { hourly: { time: times, us_aqi: [50, 80, 120], pm2_5: [10, 20, 40], grass_pollen: [5, 60, 70], birch_pollen: [null, null, null] } };
 
 describe('mergeHourly', () => {
   it('starts at the current hour and joins air quality by time', () => {
     const hours = mergeHourly(weather, air);
     expect(hours).toHaveLength(2);
     expect(hours[0]).toMatchObject({ time: '2026-11-09T11:00', temp: 27, aqi: 80, pm25: 20, rainProb: 10 });
+    expect(hours[0].pollen).toEqual({ grass: 60 });
   });
 
   it('works without air quality data', () => {
     expect(mergeHourly(weather, null)[0].aqi).toBeNull();
+    expect(mergeHourly(weather, null)[0].pollen).toBeNull();
   });
 });
 

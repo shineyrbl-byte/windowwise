@@ -1,6 +1,6 @@
 import './style.css';
 import { searchPlaces, fetchHours } from './data.js';
-import { DEFAULT_SETTINGS, FAN_FEELS_COOLER, makePlan, toBlocks, summarize, hourOf, round } from './engine.js';
+import { DEFAULT_SETTINGS, FAN_FEELS_COOLER, pollenRisk, makePlan, toBlocks, summarize, hourOf, round } from './engine.js';
 import { renderChart } from './chart.js';
 import { calibrate, describe as describeRoom } from './calibrate.js';
 import { createScheduler, notifySupport, showNotification } from './notify.js';
@@ -134,6 +134,12 @@ function initSettings() {
     save();
     if (lastHours) render(lastHours);
   });
+  $('pollenAllergy').checked = !!state.settings.pollenAllergy;
+  $('pollenAllergy').addEventListener('change', (e) => {
+    state.settings.pollenAllergy = e.target.checked;
+    save();
+    if (lastHours) render(lastHours);
+  });
   $('sensitive').checked = state.sensitive;
   $('sensitive').addEventListener('change', (e) => {
     state.sensitive = e.target.checked;
@@ -186,7 +192,14 @@ async function choose(place, quiet = false) {
     lastOffset = utcOffset;
     lastSeries = series;
     updateCalibration();
-    status(hasAir ? '' : 'Air quality data is unavailable here, so the plan uses weather only.');
+    const noPollen = state.settings.pollenAllergy && !hours.some((h) => h.pollen);
+    status(
+      !hasAir
+        ? 'Air quality data is unavailable here, so the plan uses weather only.'
+        : noPollen
+          ? "Pollen forecasts aren't available for this place (they cover Europe only), so the plan can't account for pollen."
+          : '',
+    );
     render(hours);
   } catch (err) {
     status(`${err.message}. Please try again in a moment.`, true);
@@ -245,6 +258,7 @@ function render(hours) {
         <div><dt>Humidity</dt><dd>${now.humidity}%</dd></div>
         <div><dt>Rain chance</dt><dd>${now.rainProb ?? '–'}%</dd></div>
         <div><dt>Air quality</dt><dd><span class="pill ${band.cls}">${now.aqi ?? '–'} · ${band.label}</span></dd></div>
+        ${pollenTile(now)}
       </dl>
     </section>
 
@@ -266,7 +280,7 @@ function render(hours) {
       <div class="strip-axis" aria-hidden="true">
         ${plan.map((h, i) => `<span>${i % 3 === 0 ? clock(h.time).slice(0, 2) : ''}</span>`).join('')}
       </div>
-      <p class="legend"><span class="key o"></span> Open <span class="key c"></span> Closed <span class="key air"></span> Closed: bad air <span class="key rain"></span> Closed: rain</p>
+      <p class="legend"><span class="key o"></span> Open <span class="key c"></span> Closed <span class="key air"></span> Closed: bad air <span class="key rain"></span> Closed: rain${plan.some((h) => h.reason === 'pollen') ? ' <span class="key pollen"></span> Closed: pollen' : ''}</p>
 
       <ul class="blocks">
         ${blocks
@@ -291,6 +305,13 @@ function render(hours) {
       </p>
     </section>
   `;
+}
+
+function pollenTile(h) {
+  const risk = pollenRisk(h.pollen);
+  if (!risk) return '';
+  const level = risk.ratio >= 1 ? ['High', 'bad'] : risk.ratio >= 0.4 ? ['Moderate', 'warn'] : ['Low', 'good'];
+  return `<div><dt>Pollen</dt><dd><span class="pill ${level[1]}">${level[0]} · ${esc(risk.name)}</span></dd></div>`;
 }
 
 // ---------- reminders ----------

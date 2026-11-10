@@ -9,6 +9,7 @@ export const DEFAULT_SETTINGS = {
   startIndoor: null, // °C: current room temperature, if the user knows it
   sun: 'unsure', // which part of the day the window gets direct sun (see SUN_PROFILES)
   fan: false, // a fan running in the room
+  pollenAllergy: false, // keep the window shut when pollen is high
   closedMix: null, // calibrated: how fast heat leaks into the closed room
   sunScale: null, // calibrated: how strongly the sun heats this room
   openMix: null, // calibrated: how fast the room airs out with the window open
@@ -36,6 +37,22 @@ export const SUN_PROFILES = {
 // Times look like "2026-11-09T14:00" in the place's own timezone,
 // so read the hour from the string instead of the browser's clock.
 export const hourOf = (time) => Number(time.slice(11, 13));
+// Grains per m³ at which each pollen counts as "high" (symptoms likely for
+// most allergy sufferers), based on common European pollen-forecast bands.
+export const POLLEN_HIGH = { grass: 50, birch: 100, alder: 100, mugwort: 50, olive: 200, ragweed: 20 };
+const POLLEN_NAMES = { grass: 'Grass', birch: 'Birch', alder: 'Alder', mugwort: 'Mugwort', olive: 'Olive', ragweed: 'Ragweed' };
+
+// The pollen closest to (or furthest past) its "high" level.
+export function pollenRisk(pollen) {
+  if (!pollen) return null;
+  let worst = null;
+  for (const [type, value] of Object.entries(pollen)) {
+    const ratio = value / (POLLEN_HIGH[type] || 50);
+    if (!worst || ratio > worst.ratio) worst = { type, name: POLLEN_NAMES[type] || type, value, ratio };
+  }
+  return worst;
+}
+
 export function sunGain(hour, profile = 'unsure', scale = 1) {
   const bands = SUN_PROFILES[profile] || SUN_PROFILES.unsure;
   const band = bands.find(([from, to]) => hour >= from && hour < to);
@@ -70,6 +87,12 @@ export function decideHour(hour, indoor, settings = DEFAULT_SETTINGS) {
   }
   if (aqi != null && aqi > s.aqiLimit) {
     return { open: false, reason: 'air', text: `Outdoor air is poor (AQI ${aqi})` };
+  }
+  if (s.pollenAllergy) {
+    const risk = pollenRisk(hour.pollen);
+    if (risk && risk.ratio >= 1) {
+      return { open: false, reason: 'pollen', text: `${risk.name} pollen is high (${Math.round(risk.value)} grains/m³)` };
+    }
   }
   if (temp < s.comfortMin - 1 && indoor <= s.comfortMax) {
     return { open: false, reason: 'cold', text: `Too cold outside (${round(temp)}°C)` };

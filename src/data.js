@@ -5,6 +5,8 @@ import { toEpoch } from './notify.js';
 
 const FORECAST = 'https://api.open-meteo.com/v1/forecast';
 const AIR = 'https://air-quality-api.open-meteo.com/v1/air-quality';
+export const POLLEN_TYPES = ['grass', 'birch', 'alder', 'mugwort', 'olive', 'ragweed'];
+
 const GEO = 'https://geocoding-api.open-meteo.com/v1/search';
 
 export async function searchPlaces(name, fetchFn = fetch) {
@@ -32,7 +34,17 @@ export function mergeHourly(weather, air, hours = 24) {
   const aqiByTime = new Map();
   if (air?.hourly) {
     air.hourly.time.forEach((t, i) => {
-      aqiByTime.set(t, { aqi: air.hourly.us_aqi[i], pm25: air.hourly.pm2_5[i] });
+      const pollen = {};
+      for (const type of POLLEN_TYPES) {
+        const v = air.hourly[`${type}_pollen`]?.[i];
+        if (v != null) pollen[type] = v;
+      }
+      aqiByTime.set(t, {
+        aqi: air.hourly.us_aqi[i],
+        pm25: air.hourly.pm2_5[i],
+        // Pollen is only modelled for Europe; elsewhere it stays null.
+        pollen: Object.keys(pollen).length ? pollen : null,
+      });
     });
   }
 
@@ -48,6 +60,7 @@ export function mergeHourly(weather, air, hours = 24) {
       wind: w.wind_speed_10m[i],
       aqi: a.aqi ?? null,
       pm25: a.pm25 ?? null,
+      pollen: a.pollen ?? null,
     };
   });
 }
@@ -57,7 +70,7 @@ export async function fetchHours(lat, lon, fetchFn = fetch) {
   const weatherUrl =
     `${FORECAST}?${q}&past_days=1&current=temperature_2m` +
     '&hourly=temperature_2m,apparent_temperature,relative_humidity_2m,precipitation_probability,wind_speed_10m';
-  const airUrl = `${AIR}?${q}&hourly=us_aqi,pm2_5`;
+  const airUrl = `${AIR}?${q}&hourly=us_aqi,pm2_5,${POLLEN_TYPES.map((t) => `${t}_pollen`).join(',')}`;
 
   const [wRes, aRes] = await Promise.all([fetchFn(weatherUrl), fetchFn(airUrl).catch(() => null)]);
   if (!wRes.ok) throw new Error('Weather forecast is unavailable right now');

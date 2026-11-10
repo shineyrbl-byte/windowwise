@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { decideHour, makePlan, toBlocks, summarize, bestAirHour, sunGain, step, modelParams } from '../src/engine.js';
+import { decideHour, makePlan, toBlocks, summarize, bestAirHour, sunGain, step, modelParams, pollenRisk } from '../src/engine.js';
 
 const hour = (over) => ({
   time: '2026-11-09T02:00',
@@ -122,5 +122,22 @@ describe('window sun and fan', () => {
 
   it('uses calibrated values when present', () => {
     expect(modelParams({ closedMix: 0.15, sunScale: 1.5 })).toMatchObject({ closedMix: 0.15, sunScale: 1.5 });
+  });
+});
+
+describe('pollen', () => {
+  it('finds the pollen closest to its high level', () => {
+    expect(pollenRisk({ grass: 25, ragweed: 30 })).toMatchObject({ type: 'ragweed', name: 'Ragweed' });
+    expect(pollenRisk(null)).toBeNull();
+  });
+
+  it('closes for high pollen only when the user has an allergy', () => {
+    const h = hour({ temp: 22, pollen: { grass: 80 } });
+    expect(decideHour(h, 28).open).toBe(true);
+    expect(decideHour(h, 28, { pollenAllergy: true })).toMatchObject({ open: false, reason: 'pollen' });
+  });
+
+  it('ignores missing pollen data', () => {
+    expect(decideHour(hour({ temp: 22, pollen: null }), 28, { pollenAllergy: true }).open).toBe(true);
   });
 });
