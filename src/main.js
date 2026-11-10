@@ -2,12 +2,20 @@ import './style.css';
 import { searchPlaces, fetchHours } from './data.js';
 import { DEFAULT_SETTINGS, makePlan, toBlocks, summarize, hourOf, round } from './engine.js';
 import { renderChart } from './chart.js';
+import { createScheduler, notifySupport, showNotification } from './notify.js';
 
 const $ = (id) => document.getElementById(id);
 const STORE = 'windowwise:v1';
 
 const state = load() || { place: null, settings: { ...DEFAULT_SETTINGS }, sensitive: false };
 let lastHours = null;
+let lastOffset = 0;
+let lastPlan = null;
+let refreshTimer = null;
+const scheduler = createScheduler({ show: showNotification });
+
+// Needed for notifications on Android and for installing as an app.
+if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});
 
 // ---------- storage (best effort: private windows may block it) ----------
 function load() {
@@ -102,13 +110,14 @@ $('locate').addEventListener('click', () => {
   );
 });
 
-async function choose(place) {
+async function choose(place, quiet = false) {
   state.place = place;
   save();
-  status(`Loading the forecast for ${place.name}…`);
+  if (!quiet) status(`Loading the forecast for ${place.name}…`);
   try {
-    const { hours, hasAir } = await fetchHours(place.lat, place.lon);
+    const { hours, hasAir, utcOffset } = await fetchHours(place.lat, place.lon);
     lastHours = hours;
+    lastOffset = utcOffset;
     status(hasAir ? '' : 'Air quality data is unavailable here, so the plan uses weather only.');
     render(hours);
   } catch (err) {
@@ -119,7 +128,10 @@ async function choose(place) {
 // ---------- rendering ----------
 function render(hours) {
   const plan = makePlan(hours, settings());
+  lastPlan = plan;
   const sum = summarize(plan);
+  const nextReminder =
+    state.remind && notifySupport() === 'granted' ? scheduler.schedule(plan, lastOffset, state.place.name) : (scheduler.clear(), null);
   const blocks = toBlocks(plan);
   const first = plan[0].time;
   const now = sum.now;
@@ -165,6 +177,7 @@ function render(hours) {
     </section>
 
     <section class="card benefit"><p>${benefit}</p></section>
+    ${remindHtml(nextReminder, first)}
     ${airTip}
 
     <section class="card" aria-labelledby="plan-h">
@@ -208,11 +221,59 @@ function render(hours) {
   `;
 }
 
+// ---------- reminders ----------
+function remindHtml(next, first) {
+  const support = notifySupport();
+  let body;
+  if (support === 'unsupported') {
+    body = `<p>Your browser doesn't support notifications. Try Chrome, Edge or Firefox, or install WindowWise to your home screen.</p>`;
+  } else if (support === 'denied') {
+    body = `<p>Notifications are blocked for this site. Allow them in your browser's site settings to get reminders.</p>`;
+  } else if (state.remind && support === 'granted') {
+    const when = next
+      ? `Next reminder: <strong>${next.open ? 'open' : 'close'} at ${clock(next.time)}${dayLabel(next.time, first)}</strong>.`
+      : 'No changes in the next 24 hours, so no reminders yet. The plan refreshes every 30 minutes.';
+    body = `<p>🔔 Reminders are on. ${when}</p>
+      <div class="row"><button type="button" class="ghost" data-act="remind-test">Send a test</button>
+      <button type="button" class="ghost" data-act="remind-off">Turn off</button></div>
+      <p class="small">Keep WindowWise open in a tab (it can be in the background) or install it as an app. Reminders can't arrive while it's fully closed.</p>`;
+  } else {
+    body = `<p>Get a notification when it's time to open or close your window.</p>
+      <div class="row"><button type="button" data-act="remind-on">🔔 Turn on reminders</button></div>`;
+  }
+  return `<section class="card remind" aria-labelledby="remind-h"><h3 id="remind-h">Reminders</h3>${body}</section>`;
+}
+
+function startRefresh() {
+  clearInterval(refreshTimer);
+  refreshTimer = state.remind ? setInterval(() => state.place && choose(state.place, true), 30 * 60 * 1000) : null;
+}
+
+$('out').addEventListener('click', async (e) => {
+  const act = e.target.closest('[data-act]')?.dataset.act;
+  if (!act || !lastHours) return;
+  if (act === 'remind-on') {
+    const perm = await Notification.requestPermission();
+    state.remind = perm === 'granted';
+    if (!state.remind) status('Notifications were not allowed, so reminders stay off.', true);
+  } else if (act === 'remind-off') {
+    state.remind = false;
+  } else if (act === 'remind-test') {
+    const now = lastPlan[0];
+    showNotification({ open: now.open, text: `Test reminder. Right now: ${now.text}` }, state.place.name);
+    return;
+  }
+  save();
+  startRefresh();
+  render(lastHours);
+});
+
 const windowOpenSvg = `<svg viewBox="0 0 48 48" width="44" height="44"><rect x="6" y="5" width="36" height="38" rx="3" fill="none" stroke="currentColor" stroke-width="3"/><path d="M6 5 L20 11 V37 L6 43 Z M42 5 L28 11 V37 L42 43 Z" fill="currentColor" opacity=".25" stroke="currentColor" stroke-width="2.5" stroke-linejoin="round"/></svg>`;
 const windowShutSvg = `<svg viewBox="0 0 48 48" width="44" height="44"><rect x="6" y="5" width="36" height="38" rx="3" fill="currentColor" fill-opacity=".15" stroke="currentColor" stroke-width="3"/><path d="M24 5v38M6 24h36" stroke="currentColor" stroke-width="3"/></svg>`;
 
 // ---------- start ----------
 initSettings();
+startRefresh();
 if (state.place) {
   $('q').value = state.place.name === 'Your location' ? '' : state.place.name;
   choose(state.place);

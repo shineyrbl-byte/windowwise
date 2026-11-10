@@ -186,3 +186,8 @@ button.ghost { background: transparent; color: var(--accent); }
 .line.out { border-color: var(--out); border-top-style: dashed; }
 
 .foot { color: var(--muted); font-size: 0.85rem; padding-bottom: 32px; }
+
+/* reminders */
+.remind p { margin: 0 0 10px; }
+.remind .row { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 10px; }
+.small { font-size: 0.85rem; color: var(--muted); }

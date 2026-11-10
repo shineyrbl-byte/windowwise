@@ -62,5 +62,10 @@ export async function fetchHours(lat, lon, fetchFn = fetch) {
   const weather = await wRes.json();
   // Air quality is optional: the plan still works on weather alone.
   const air = aRes && aRes.ok ? await aRes.json() : null;
-  return { hours: mergeHourly(weather, air), timezone: weather.timezone, hasAir: !!air };
+  return {
+    hours: mergeHourly(weather, air),
+    timezone: weather.timezone,
+    utcOffset: weather.utc_offset_seconds ?? 0,
+    hasAir: !!air,
+  };
 }
