@@ -1,6 +1,8 @@
 // Fetches weather + air quality from Open-Meteo (free, no API key)
 // and merges them into one list of hourly records.
 
+import { toEpoch } from './notify.js';
+
 const FORECAST = 'https://api.open-meteo.com/v1/forecast';
 const AIR = 'https://air-quality-api.open-meteo.com/v1/air-quality';
 const GEO = 'https://geocoding-api.open-meteo.com/v1/search';
@@ -53,7 +55,7 @@ export function mergeHourly(weather, air, hours = 24) {
 export async function fetchHours(lat, lon, fetchFn = fetch) {
   const q = `latitude=${lat}&longitude=${lon}&timezone=auto&forecast_days=2`;
   const weatherUrl =
-    `${FORECAST}?${q}&current=temperature_2m` +
+    `${FORECAST}?${q}&past_days=1&current=temperature_2m` +
     '&hourly=temperature_2m,apparent_temperature,relative_humidity_2m,precipitation_probability,wind_speed_10m';
   const airUrl = `${AIR}?${q}&hourly=us_aqi,pm2_5`;
 
@@ -62,8 +64,15 @@ export async function fetchHours(lat, lon, fetchFn = fetch) {
   const weather = await wRes.json();
   // Air quality is optional: the plan still works on weather alone.
   const air = aRes && aRes.ok ? await aRes.json() : null;
+  const offset = weather.utc_offset_seconds ?? 0;
   return {
     hours: mergeHourly(weather, air),
+    // Every hour including yesterday, used to calibrate against past readings.
+    series: weather.hourly.time.map((t, i) => ({
+      at: toEpoch(t, offset),
+      hour: Number(t.slice(11, 13)),
+      temp: weather.hourly.temperature_2m[i],
+    })),
     timezone: weather.timezone,
     utcOffset: weather.utc_offset_seconds ?? 0,
     hasAir: !!air,

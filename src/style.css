@@ -191,3 +191,8 @@ button.ghost { background: transparent; color: var(--accent); }
 .remind p { margin: 0 0 10px; }
 .remind .row { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 10px; }
 .small { font-size: 0.85rem; color: var(--muted); }
+
+/* calibration */
+.calib summary { cursor: pointer; font-weight: 600; }
+.calib .small { margin: 10px 0 0; }
+.fields .row { display: flex; gap: 8px; align-items: end; flex-wrap: wrap; }

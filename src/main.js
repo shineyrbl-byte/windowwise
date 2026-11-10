@@ -2,6 +2,7 @@ import './style.css';
 import { searchPlaces, fetchHours } from './data.js';
 import { DEFAULT_SETTINGS, FAN_FEELS_COOLER, makePlan, toBlocks, summarize, hourOf, round } from './engine.js';
 import { renderChart } from './chart.js';
+import { calibrate, describe as describeRoom } from './calibrate.js';
 import { createScheduler, notifySupport, showNotification } from './notify.js';
 
 const $ = (id) => document.getElementById(id);
@@ -10,6 +11,8 @@ const STORE = 'windowwise:v1';
 const state = load() || { place: null, settings: { ...DEFAULT_SETTINGS }, sensitive: false };
 let lastHours = null;
 let lastOffset = 0;
+let lastSeries = [];
+let calibration = null;
 let lastPlan = null;
 let refreshTimer = null;
 const scheduler = createScheduler({ show: showNotification });
@@ -52,9 +55,60 @@ function aqiBand(aqi) {
   return { label: 'Very unhealthy', cls: 'bad' };
 }
 
-function settings() {
+function baseSettings() {
   return { ...state.settings, aqiLimit: state.sensitive ? 50 : 100 };
 }
+
+// Base settings plus anything learned from thermometer readings.
+function settings() {
+  const s = { ...baseSettings(), ...(calibration || {}) };
+  const latest = placeReadings().at(-1);
+  if (latest && Date.now() - latest.at < 3 * 3600 * 1000) s.startIndoor = latest.temp;
+  return s;
+}
+
+// ---------- calibration ----------
+function placeReadings() {
+  const p = state.place;
+  if (!p) return [];
+  const week = Date.now() - 7 * 24 * 3600 * 1000;
+  return (state.readings || [])
+    .filter((r) => Math.abs(r.lat - p.lat) < 0.05 && Math.abs(r.lon - p.lon) < 0.05 && r.at > week)
+    .sort((a, b) => a.at - b.at);
+}
+
+function updateCalibration() {
+  const readings = placeReadings();
+  calibration = lastSeries.length ? calibrate(readings, lastSeries, baseSettings()) : null;
+  const pairs = calibration ? (calibration.closedPairs || 0) + (calibration.openPairs || 0) : 0;
+  $('calib-status').textContent = !readings.length
+    ? 'No readings yet.'
+    : calibration
+      ? `Calibrated from ${readings.length} readings (${pairs} usable ${pairs === 1 ? 'gap' : 'gaps'}). ${describeRoom(calibration)}`
+      : `${readings.length} reading${readings.length === 1 ? '' : 's'} logged. Log another at least an hour after the last one to calibrate.`;
+}
+
+$('calib-form').addEventListener('submit', (e) => {
+  e.preventDefault();
+  if (!state.place) return status('Choose a place first, then log your reading.', true);
+  const temp = Number($('calibTemp').value);
+  state.readings = [
+    ...(state.readings || []),
+    { at: Date.now(), temp, open: $('calibOpen').value === 'open', lat: state.place.lat, lon: state.place.lon },
+  ].slice(-40);
+  save();
+  $('calibTemp').value = '';
+  updateCalibration();
+  if (lastHours) render(lastHours);
+});
+
+$('calib-reset').addEventListener('click', () => {
+  const p = state.place;
+  state.readings = (state.readings || []).filter((r) => !p || Math.abs(r.lat - p.lat) >= 0.05 || Math.abs(r.lon - p.lon) >= 0.05);
+  save();
+  updateCalibration();
+  if (lastHours) render(lastHours);
+});
 
 // ---------- settings form ----------
 function initSettings() {
@@ -127,9 +181,11 @@ async function choose(place, quiet = false) {
   save();
   if (!quiet) status(`Loading the forecast for ${place.name}…`);
   try {
-    const { hours, hasAir, utcOffset } = await fetchHours(place.lat, place.lon);
+    const { hours, hasAir, utcOffset, series } = await fetchHours(place.lat, place.lon);
     lastHours = hours;
     lastOffset = utcOffset;
+    lastSeries = series;
+    updateCalibration();
     status(hasAir ? '' : 'Air quality data is unavailable here, so the plan uses weather only.');
     render(hours);
   } catch (err) {

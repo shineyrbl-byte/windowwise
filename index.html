@@ -63,6 +63,25 @@
         </div>
       </details>
 
+      <details class="card calib">
+        <summary>Calibrate to your room (optional)</summary>
+        <p class="small">Have a thermometer? Log your room temperature a few times over a day or two, at least an hour apart. WindowWise compares your readings with the real outdoor weather for those hours and tunes its model to how your room behaves.</p>
+        <form id="calib-form" class="fields">
+          <label>Room temperature now (°C)
+            <input id="calibTemp" type="number" step="0.1" min="0" max="50" required />
+          </label>
+          <label>Since your last reading, the window was
+            <select id="calibOpen">
+              <option value="closed">Mostly closed</option>
+              <option value="open">Mostly open</option>
+            </select>
+          </label>
+          <div class="row"><button type="submit">Log reading</button>
+          <button type="button" class="ghost" id="calib-reset">Reset</button></div>
+        </form>
+        <p id="calib-status" class="small" aria-live="polite"></p>
+      </details>
+
       <div id="status" class="status" role="status" aria-live="polite"></div>
       <div id="out"></div>
     </main>

@@ -11,6 +11,7 @@ export const DEFAULT_SETTINGS = {
   fan: false, // a fan running in the room
   closedMix: null, // calibrated: how fast heat leaks into the closed room
   sunScale: null, // calibrated: how strongly the sun heats this room
+  openMix: null, // calibrated: how fast the room airs out with the window open
 };
 
 // Simple room model, tuned to feel plausible rather than to be exact:
@@ -45,7 +46,7 @@ export function sunGain(hour, profile = 'unsure', scale = 1) {
 export function modelParams(settings = {}) {
   const s = { ...DEFAULT_SETTINGS, ...settings };
   return {
-    openMix: s.fan ? FAN_OPEN_MIX : OPEN_MIX,
+    openMix: s.openMix ?? (s.fan ? FAN_OPEN_MIX : OPEN_MIX),
     closedMix: s.closedMix ?? CLOSED_MIX,
     sunScale: s.sunScale ?? 1,
     sun: s.sun,
