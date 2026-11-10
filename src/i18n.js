@@ -174,6 +174,8 @@ const en = {
   r_wind: 'Strong wind gusts ({g} km/h)',
   r_damp: 'Humid outside ({h}%): opening would add moisture',
   r_dry: 'Drier air outside ({h}%): good for drying the room',
+  save_place: 'Save this place',
+  unsave: 'Remove {place}',
 };
 
 const hi = {
@@ -347,6 +349,8 @@ const hi = {
   r_wind: 'तेज़ हवा के झोंके ({g} km/h)',
   r_damp: 'बाहर नमी है ({h}%): खोलने से सीलन बढ़ेगी',
   r_dry: 'बाहर की हवा सूखी है ({h}%): कमरा सुखाने का अच्छा समय',
+  save_place: 'यह जगह सेव करें',
+  unsave: '{place} हटाएँ',
 };
 
 const DICTS = { en, hi };

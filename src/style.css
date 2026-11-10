@@ -236,3 +236,11 @@ input[type='text'] { font: inherit; color: var(--ink); background: var(--bg); bo
   .week li { grid-template-columns: 1fr auto; }
   .week .wopen, .week .wnight { grid-column: 1 / -1; }
 }
+
+/* saved places */
+.saved { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+.chip { display: inline-flex; align-items: stretch; border: 1px solid var(--line); border-radius: 99px; overflow: hidden; background: var(--bg); }
+.chip.on { border-color: var(--accent); }
+.chip button { background: transparent; color: var(--ink); border: 0; border-radius: 0; padding: 6px 12px; font-weight: 600; }
+.chip .x { padding: 6px 10px; color: var(--muted); border-left: 1px solid var(--line); }
+.small-btn { padding: 6px 12px; border-radius: 99px; font-size: 0.9rem; }

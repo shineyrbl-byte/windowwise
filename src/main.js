@@ -140,6 +140,7 @@ function applyLanguage() {
   $('footer-text').innerHTML = esc(t('footer')).replace('{link}', '<a href="https://open-meteo.com/">Open-Meteo</a>');
   if (statusKey) status(statusKey.key, statusKey.vars, statusKey.isError);
   updateCalibrationText();
+  renderSaved();
   rerender();
 }
 
@@ -205,44 +206,94 @@ $('calib-reset').addEventListener('click', () => {
 });
 
 // ---------- settings form ----------
+const NUMBER_FIELDS = ['startIndoor', 'comfortMax', 'comfortMin', 'tariff', 'acKw'];
+const CHECK_FIELDS = ['fan', 'pollenAllergy', 'crossVent', 'curtains', 'damp'];
+
+// Saved places keep their own settings (a hostel room and a home room differ).
+const placeKey = (p) => `${Number(p.lat).toFixed(2)},${Number(p.lon).toFixed(2)}`;
+const isSaved = (p) => !!p && (state.saved || []).some((x) => placeKey(x) === placeKey(p));
+
+function settingsChanged() {
+  if (isSaved(state.place)) {
+    state.placeSettings = { ...(state.placeSettings || {}), [placeKey(state.place)]: { ...state.settings, sensitive: state.sensitive } };
+  }
+  save();
+  rerender();
+}
+
+function syncForm() {
+  for (const key of NUMBER_FIELDS) $(key).value = state.settings[key] ?? (key === 'startIndoor' ? '' : DEFAULT_SETTINGS[key]);
+  for (const key of CHECK_FIELDS) $(key).checked = !!state.settings[key];
+  $('sun').value = state.settings.sun || 'unsure';
+  $('currency').value = state.settings.currency ?? DEFAULT_SETTINGS.currency;
+  $('sensitive').checked = !!state.sensitive;
+}
+
 function initSettings() {
-  for (const key of ['startIndoor', 'comfortMax', 'comfortMin', 'tariff', 'acKw']) {
-    const input = $(key);
-    input.value = state.settings[key] ?? (key === 'startIndoor' ? '' : DEFAULT_SETTINGS[key]);
-    input.addEventListener('change', () => {
-      const v = input.value === '' ? null : Number(input.value);
+  for (const key of NUMBER_FIELDS) {
+    $(key).addEventListener('change', (e) => {
+      const v = e.target.value === '' ? null : Number(e.target.value);
       state.settings[key] = v ?? (key === 'startIndoor' ? null : DEFAULT_SETTINGS[key]);
-      save();
-      rerender();
+      settingsChanged();
     });
   }
-  $('sun').value = state.settings.sun || 'unsure';
-  $('sun').addEventListener('change', (e) => {
-    state.settings.sun = e.target.value;
-    save();
-    rerender();
-  });
-  $('currency').value = state.settings.currency ?? DEFAULT_SETTINGS.currency;
-  $('currency').addEventListener('change', (e) => {
-    state.settings.currency = e.target.value.trim().slice(0, 4) || DEFAULT_SETTINGS.currency;
-    save();
-    rerender();
-  });
-  for (const key of ['fan', 'pollenAllergy', 'crossVent', 'curtains', 'damp']) {
-    $(key).checked = !!state.settings[key];
+  for (const key of CHECK_FIELDS) {
     $(key).addEventListener('change', (e) => {
       state.settings[key] = e.target.checked;
-      save();
-      rerender();
+      settingsChanged();
     });
   }
-  $('sensitive').checked = !!state.sensitive;
+  $('sun').addEventListener('change', (e) => {
+    state.settings.sun = e.target.value;
+    settingsChanged();
+  });
+  $('currency').addEventListener('change', (e) => {
+    state.settings.currency = e.target.value.trim().slice(0, 4) || DEFAULT_SETTINGS.currency;
+    settingsChanged();
+  });
   $('sensitive').addEventListener('change', (e) => {
     state.sensitive = e.target.checked;
-    save();
-    rerender();
+    settingsChanged();
   });
+  syncForm();
 }
+
+// ---------- saved places ----------
+function renderSaved() {
+  const saved = state.saved || [];
+  const current = state.place;
+  $('saved').innerHTML =
+    saved
+      .map(
+        (p, i) => `<span class="chip ${current && placeKey(p) === placeKey(current) ? 'on' : ''}">
+          <button type="button" data-saved="${i}">${esc(placeName(p))}</button>
+          <button type="button" class="x" data-unsave="${i}" aria-label="${esc(t('unsave', { place: placeName(p) }))}">×</button>
+        </span>`,
+      )
+      .join('') +
+    (current && !isSaved(current) ? `<button type="button" class="ghost small-btn" data-act-save>☆ ${t('save_place')}</button>` : '');
+  $('saved').hidden = !saved.length && !current;
+}
+
+$('saved').addEventListener('click', (e) => {
+  const pick = e.target.closest('[data-saved]');
+  const drop = e.target.closest('[data-unsave]');
+  if (e.target.closest('[data-act-save]') && state.place) {
+    state.saved = [...(state.saved || []), state.place].slice(-8);
+    settingsChanged();
+  } else if (drop) {
+    const p = state.saved[Number(drop.dataset.unsave)];
+    state.saved = state.saved.filter((_, i) => i !== Number(drop.dataset.unsave));
+    if (state.placeSettings) delete state.placeSettings[placeKey(p)];
+    save();
+  } else if (pick) {
+    const p = state.saved[Number(pick.dataset.saved)];
+    $('q').value = isMine(p) ? '' : p.name;
+    choose(p);
+    return;
+  }
+  renderSaved();
+});
 
 // ---------- place search ----------
 $('search').addEventListener('submit', async (e) => {
@@ -280,8 +331,17 @@ $('locate').addEventListener('click', () => {
 });
 
 async function choose(place, quiet = false) {
+  const switched = !state.place || placeKey(state.place) !== placeKey(place);
   state.place = place;
+  const own = state.placeSettings?.[placeKey(place)];
+  if (switched && own) {
+    const { sensitive, ...rest } = own;
+    state.settings = { ...DEFAULT_SETTINGS, ...rest };
+    state.sensitive = !!sensitive;
+    syncForm();
+  }
   save();
+  renderSaved();
   if (!quiet) status('loading', { place: placeName(place) });
   try {
     const { hours, week, hasAir, utcOffset, series } = await fetchHours(place.lat, place.lon);
