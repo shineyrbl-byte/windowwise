@@ -4,6 +4,8 @@
 
 **Live demo:** https://shineyrbl-byte.github.io/windowwise/ (no sign-up, no install)
 
+**Demo video (2½ min):** https://youtu.be/Bh7E0GbJn2U
+
 Built for **LaunchPad Hacks** (October 16 – November 20, 2026). All code in this repository was written during the event.
 
 ## The problem
