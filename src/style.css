@@ -251,3 +251,5 @@ input[type='text'] { font: inherit; color: var(--ink); background: var(--bg); bo
 .chart .dot.hollow { fill: var(--card); stroke: var(--accent); stroke-width: 3; }
 .bt-row { display: grid; gap: 4px; margin-top: 12px; }
 .bt-row .small { margin: 0; }
+
+.top-actions { display: flex; align-items: center; gap: 8px; }

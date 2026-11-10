@@ -9,6 +9,7 @@ import { t, setLang, getLang, LANGS } from './i18n.js';
 
 const $ = (id) => document.getElementById(id);
 const STORE = 'windowwise:v1';
+const CACHE_KEY = 'windowwise:forecast'; // last forecast, for offline use
 
 const state = load() || { place: null, settings: { ...DEFAULT_SETTINGS }, sensitive: false };
 // A shared hostel link sets the place and room settings for this device.
@@ -371,14 +372,15 @@ async function choose(place, quiet = false) {
   renderSaved();
   if (!quiet) status('loading', { place: placeName(place) });
   try {
-    const { hours, week, hasAir, utcOffset, series } = await fetchHours(place.lat, place.lon);
+    const { hours, week, hasAir, utcOffset, series, offline, savedAt } = await fetchWithOffline(place);
     lastHours = hours;
     lastWeek = week;
     lastOffset = utcOffset;
     lastSeries = series;
     updateCalibration();
     const noPollen = state.settings.pollenAllergy && !hours.some((h) => h.pollen);
-    if (!hasAir) status('no_air');
+    if (offline) status('offline', { time: new Date(savedAt).toLocaleString([], { weekday: 'short', hour: '2-digit', minute: '2-digit' }) });
+    else if (!hasAir) status('no_air');
     else if (noPollen) status('no_pollen');
     else status(null);
     render(hours);
@@ -386,6 +388,51 @@ async function choose(place, quiet = false) {
     status('load_err', {}, true);
   }
 }
+
+// Save each forecast; when the network fails, rebuild today's hours from the
+// saved week, starting at the current hour in the place's timezone.
+async function fetchWithOffline(place) {
+  try {
+    const r = await fetchHours(place.lat, place.lon);
+    try {
+      localStorage.setItem(CACHE_KEY, JSON.stringify({ key: placeKey(place), savedAt: Date.now(), r }));
+    } catch {
+      /* storage full or blocked */
+    }
+    return r;
+  } catch (err) {
+    let cached = null;
+    try {
+      cached = JSON.parse(localStorage.getItem(CACHE_KEY));
+    } catch {
+      /* ignore */
+    }
+    if (!cached || cached.key !== placeKey(place) || Date.now() - cached.savedAt > 6 * 24 * 3600e3) throw err;
+    const { r } = cached;
+    const nowLocal = new Date(Date.now() + r.utcOffset * 1000).toISOString().slice(0, 13);
+    const idx = r.week.findIndex((h) => h.time.slice(0, 13) === nowLocal);
+    if (idx === -1) throw err;
+    return { ...r, hours: r.week.slice(idx, idx + 24), week: r.week.slice(idx), offline: true, savedAt: cached.savedAt };
+  }
+}
+
+// ---------- install ----------
+let installEvent = null;
+window.addEventListener('beforeinstallprompt', (e) => {
+  e.preventDefault();
+  installEvent = e;
+  $('install').hidden = false;
+});
+$('install').addEventListener('click', async () => {
+  if (!installEvent) return;
+  installEvent.prompt();
+  await installEvent.userChoice.catch(() => null);
+  installEvent = null;
+  $('install').hidden = true;
+});
+window.addEventListener('appinstalled', () => {
+  $('install').hidden = true;
+});
 
 // ---------- rendering ----------
 function render(hours) {

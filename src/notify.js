@@ -75,8 +75,8 @@ export async function showNotification(change, placeName, msg = message(change))
     body: placeName ? `${placeName}: ${body}` : body,
     tag: 'windowwise-change',
     renotify: true,
-    icon: 'icon.svg',
-    badge: 'icon.svg',
+    icon: 'icon-192.png',
+    badge: 'icon-192.png',
   };
   try {
     const reg = await navigator.serviceWorker?.getRegistration();

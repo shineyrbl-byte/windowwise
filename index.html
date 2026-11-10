@@ -8,7 +8,7 @@
     <link rel="icon" href="icon.svg" type="image/svg+xml" />
     <link rel="manifest" href="manifest.webmanifest" />
     <meta name="theme-color" content="#2563eb" />
-    <link rel="apple-touch-icon" href="icon.svg" />
+    <link rel="apple-touch-icon" href="apple-touch-icon.png" />
   </head>
   <body>
     <a class="skip" href="#main" data-i18n="skip">Skip to content</a>
@@ -16,9 +16,12 @@
       <div class="wrap">
         <div class="brand-row">
           <p class="brand"><span class="logo" aria-hidden="true"></span>WindowWise</p>
+          <div class="top-actions">
+          <button type="button" id="install" class="ghost small-btn" data-i18n="install" hidden>📲 Install app</button>
           <label class="lang"><span class="sr-only" data-i18n="language">Language</span>
             <select id="lang" aria-label="Language / भाषा"></select>
           </label>
+          </div>
         </div>
         <p class="tagline" data-i18n="tagline">Know when to open your windows: cool your room for free, keep bad air out.</p>
       </div>
