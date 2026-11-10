@@ -10,6 +10,11 @@ import { step, modelParams } from './engine.js';
 const HOUR = 3600 * 1000;
 export const MIN_GAP = 1 * HOUR;
 export const MAX_GAP = 12 * HOUR;
+// One gap can't tell sun heating apart from heat leaking in, so wait for two.
+export const MIN_PAIRS = 2;
+// Small pull toward typical values so a few noisy readings can't produce
+// an extreme room (in °C² of error per unit of relative change).
+const PRIOR_WEIGHT = 0.02;
 
 const range = (from, to, by) => {
   const out = [];
@@ -41,6 +46,14 @@ export function replay(from, to, series, params) {
   return indoor;
 }
 
+function prior(c, base) {
+  let p = 0;
+  if (c.closedMix != null) p += ((c.closedMix - base.closedMix) / base.closedMix) ** 2;
+  if (c.sunScale != null) p += (c.sunScale - 1) ** 2;
+  if (c.openMix != null) p += ((c.openMix - base.openMix) / base.openMix) ** 2;
+  return PRIOR_WEIGHT * p;
+}
+
 function bestFit(pairs, series, base, grid) {
   let best = null;
   for (const candidate of grid) {
@@ -53,7 +66,8 @@ function bestFit(pairs, series, base, grid) {
       err += (sim - b.temp) ** 2;
       n++;
     }
-    if (n && (!best || err / n < best.err)) best = { ...candidate, err: err / n, n };
+    const score = n ? err / n + prior(candidate, base) : Infinity;
+    if (n && (!best || score < best.err)) best = { ...candidate, err: score, n };
   }
   return best;
 }
@@ -63,19 +77,20 @@ function bestFit(pairs, series, base, grid) {
 export function calibrate(readings, series, settings = {}) {
   const base = modelParams(settings);
   const pairs = usablePairs(readings);
+  if (pairs.length < MIN_PAIRS) return null;
   const closed = pairs.filter(([, b]) => !b.open);
   const open = pairs.filter(([, b]) => b.open);
   const result = {};
 
-  if (closed.length) {
+  if (closed.length >= MIN_PAIRS) {
     const grid = [];
     for (const closedMix of range(0.02, 0.25, 0.01)) {
-      for (const sunScale of range(0, 3, 0.1)) grid.push({ closedMix, sunScale });
+      for (const sunScale of range(0, 2.2, 0.1)) grid.push({ closedMix, sunScale });
     }
     const fit = bestFit(closed, series, base, grid);
     if (fit) Object.assign(result, { closedMix: fit.closedMix, sunScale: fit.sunScale, closedPairs: fit.n });
   }
-  if (open.length) {
+  if (open.length >= MIN_PAIRS) {
     const grid = range(0.15, 0.95, 0.05).map((openMix) => ({ openMix }));
     const fit = bestFit(open, series, { ...base, ...result }, grid);
     if (fit) Object.assign(result, { openMix: fit.openMix, openPairs: fit.n });
@@ -83,20 +98,37 @@ export function calibrate(readings, series, settings = {}) {
   return Object.keys(result).length ? result : null;
 }
 
-// Plain-language description of a calibrated room compared to the default.
-export function describe(cal, defaults = modelParams({})) {
-  if (!cal) return '';
-  const bits = [];
+// How a calibrated room compares to the default, as message keys
+// (translated by the interface; see i18n.js).
+export function describeKeys(cal, defaults = modelParams({})) {
+  if (!cal) return [];
+  const keys = [];
   if (cal.closedMix != null) {
     const r = cal.closedMix / defaults.closedMix;
-    bits.push(r > 1.25 ? 'lets heat in faster than average when closed' : r < 0.8 ? 'holds its temperature well when closed' : 'leaks heat at an average rate');
+    keys.push(r > 1.25 ? 'leak_fast' : r < 0.8 ? 'leak_slow' : 'leak_avg');
   }
-  if (cal.sunScale != null) {
-    bits.push(cal.sunScale > 1.3 ? 'gets a lot of sun heat' : cal.sunScale < 0.7 ? 'gets little sun heat' : 'gets a typical amount of sun');
-  }
+  if (cal.sunScale != null) keys.push(cal.sunScale > 1.3 ? 'sun_high' : cal.sunScale < 0.7 ? 'sun_low' : 'sun_avg');
   if (cal.openMix != null) {
     const r = cal.openMix / defaults.openMix;
-    bits.push(r > 1.2 ? 'airs out quickly' : r < 0.8 ? 'airs out slowly' : 'airs out at a normal pace');
+    keys.push(r > 1.2 ? 'air_fast' : r < 0.8 ? 'air_slow' : 'air_avg');
   }
-  return `Your room ${bits.join(', ')}.`;
+  return keys;
+}
+
+const ENGLISH = {
+  leak_fast: 'lets heat in faster than average when closed',
+  leak_slow: 'holds its temperature well when closed',
+  leak_avg: 'leaks heat at an average rate',
+  sun_high: 'gets a lot of sun heat',
+  sun_low: 'gets little sun heat',
+  sun_avg: 'gets a typical amount of sun',
+  air_fast: 'airs out quickly',
+  air_slow: 'airs out slowly',
+  air_avg: 'airs out at a normal pace',
+};
+
+// English sentence, used by tests and as a fallback.
+export function describe(cal) {
+  const keys = describeKeys(cal);
+  return keys.length ? `Your room ${keys.map((k) => ENGLISH[k]).join(', ')}.` : '';
 }

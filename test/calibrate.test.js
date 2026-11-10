@@ -37,8 +37,24 @@ group('usablePairs', () => {
 });
 
 group('calibrate', () => {
-  it('needs at least two usable readings', () => {
+  it('needs at least two usable gaps between readings', () => {
     expect(calibrate([{ at: t0, temp: 30, open: false }], series)).toBeNull();
+    expect(
+      calibrate([{ at: t0 + 10 * HOUR, temp: 27.5, open: false }, { at: t0 + 12 * HOUR, temp: 30, open: false }], series),
+    ).toBeNull();
+  });
+
+  it('does not invent an extreme room from a few readings', () => {
+    const cal = calibrate(
+      [
+        { at: t0 + 9 * HOUR, temp: 27.5, open: false },
+        { at: t0 + 11 * HOUR, temp: 30, open: false },
+        { at: t0 + 13 * HOUR, temp: 31, open: false },
+      ],
+      series,
+    );
+    expect(cal.sunScale).toBeLessThanOrEqual(2.2);
+    expect(cal.closedMix).toBeLessThanOrEqual(0.25);
   });
 
   it('recovers a leaky, sunny room from closed-window readings', () => {
@@ -50,8 +66,9 @@ group('calibrate', () => {
       { at: t0 + 18 * HOUR, open: false },
     ]);
     const cal = calibrate(readings, series);
-    expect(cal.closedMix).toBeCloseTo(0.15, 2);
-    expect(cal.sunScale).toBeCloseTo(2, 1);
+    // The gentle pull toward typical values means "close", not exact.
+    expect(cal.closedMix).toBeGreaterThan(0.11);
+    expect(cal.sunScale).toBeGreaterThan(1.5);
     expect(describe(cal)).toMatch(/faster than average/);
   });
 
@@ -63,7 +80,7 @@ group('calibrate', () => {
       { at: t0 + 6 * HOUR, open: true },
     ]);
     const cal = calibrate(readings, series);
-    expect(cal.openMix).toBeCloseTo(0.3, 2);
+    expect(cal.openMix).toBeLessThan(0.4);
     expect(describe(cal)).toMatch(/airs out slowly/);
   });
 
