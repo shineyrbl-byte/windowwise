@@ -10,6 +10,13 @@ export const DEFAULT_SETTINGS = {
   sun: 'unsure', // which part of the day the window gets direct sun (see SUN_PROFILES)
   fan: false, // a fan running in the room
   pollenAllergy: false, // keep the window shut when pollen is high
+  crossVent: false, // windows on two sides of the room: air flows through faster
+  curtains: false, // curtains or blinds closed during sunny hours
+  damp: false, // damp/monsoon mode: dry the room out when outside air is drier
+  gustLimit: 50, // km/h: close for wind gusts at or above this
+  acKw: 1.2, // kWh an AC uses per hour of running (a typical 1.5-ton split AC)
+  tariff: 8, // electricity price per kWh
+  currency: '₹',
   closedMix: null, // calibrated: how fast heat leaks into the closed room
   sunScale: null, // calibrated: how strongly the sun heats this room
   openMix: null, // calibrated: how fast the room airs out with the window open
@@ -22,6 +29,10 @@ export const OPEN_MIX = 0.5;
 export const FAN_OPEN_MIX = 0.65; // a fan pulls outside air through faster
 export const CLOSED_MIX = 0.08;
 export const FAN_FEELS_COOLER = 2; // °C: a ceiling fan's breeze feels about this much cooler
+export const CROSS_MIX = 0.75; // windows on two sides: air flows straight through
+export const CURTAIN_FACTOR = 0.5; // closed curtains or blinds block about half the sun heat
+export const CLOUD_BLOCK = 0.7; // full cloud cover removes about 70% of sun heat
+export const GRID_CO2 = 0.71; // kg CO₂ per kWh, India's grid average (CEA)
 
 // °C of sun heating per hour, by when the window gets direct sun.
 // Described by time of day rather than compass direction so it works
@@ -63,17 +74,17 @@ export function sunGain(hour, profile = 'unsure', scale = 1) {
 export function modelParams(settings = {}) {
   const s = { ...DEFAULT_SETTINGS, ...settings };
   return {
-    openMix: s.openMix ?? (s.fan ? FAN_OPEN_MIX : OPEN_MIX),
+    openMix: s.openMix ?? (s.crossVent ? CROSS_MIX : OPEN_MIX) + (s.fan ? FAN_OPEN_MIX - OPEN_MIX : 0),
     closedMix: s.closedMix ?? CLOSED_MIX,
-    sunScale: s.sunScale ?? 1,
+    sunScale: (s.sunScale ?? 1) * (s.curtains ? CURTAIN_FACTOR : 1),
     sun: s.sun,
   };
 }
 
 // One hour of the room model. Exported so calibration can reuse it.
-export function step(indoor, outdoor, open, hour, p = modelParams()) {
+export function step(indoor, outdoor, open, hour, p = modelParams(), cloud = 0) {
   const mix = open ? p.openMix : p.closedMix;
-  const sun = open ? 0 : sunGain(hour, p.sun, p.sunScale);
+  const sun = open ? 0 : sunGain(hour, p.sun, p.sunScale) * (1 - (CLOUD_BLOCK * (cloud ?? 0)) / 100);
   return indoor + (outdoor - indoor) * mix + sun;
 }
 
@@ -85,6 +96,9 @@ export function decideHour(hour, indoor, settings = DEFAULT_SETTINGS) {
   if (rainProb != null && rainProb >= s.rainLimit) {
     return { open: false, reason: 'rain', text: `${rainProb}% chance of rain` };
   }
+  if (hour.gust != null && hour.gust >= s.gustLimit) {
+    return { open: false, reason: 'wind', text: `Strong wind gusts (${Math.round(hour.gust)} km/h)` };
+  }
   if (aqi != null && aqi > s.aqiLimit) {
     return { open: false, reason: 'air', text: `Outdoor air is poor (AQI ${aqi})` };
   }
@@ -92,6 +106,14 @@ export function decideHour(hour, indoor, settings = DEFAULT_SETTINGS) {
     const risk = pollenRisk(hour.pollen);
     if (risk && risk.ratio >= 1) {
       return { open: false, reason: 'pollen', text: `${risk.name} pollen is high (${Math.round(risk.value)} grains/m³)` };
+    }
+  }
+  if (s.damp && humidity != null) {
+    if (humidity >= 85) {
+      return { open: false, reason: 'damp', text: `Humid outside (${humidity}%): opening would add moisture` };
+    }
+    if (humidity <= 65 && temp >= s.comfortMin - 1) {
+      return { open: true, reason: 'dry', text: `Drier air outside (${humidity}%): good for drying the room` };
     }
   }
   if (temp < s.comfortMin - 1 && indoor <= s.comfortMax) {
@@ -122,8 +144,8 @@ export function makePlan(hours, settings = {}) {
   return hours.map((hour) => {
     const decision = decideHour(hour, planned, s);
     const entry = { ...hour, ...decision, indoorPlan: planned, indoorShut: shut };
-    planned = step(planned, hour.temp, decision.open, hourOf(hour.time), p);
-    shut = step(shut, hour.temp, false, hourOf(hour.time), p);
+    planned = step(planned, hour.temp, decision.open, hourOf(hour.time), p, hour.cloud);
+    shut = step(shut, hour.temp, false, hourOf(hour.time), p, hour.cloud);
     return entry;
   });
 }
@@ -145,8 +167,9 @@ export function toBlocks(plan) {
 }
 
 // Headline numbers: the hottest the room gets with and without the plan.
-export function summarize(plan) {
+export function summarize(plan, settings = {}) {
   if (!plan.length) return null;
+  const s = { ...DEFAULT_SETTINGS, ...settings };
   // Skip the first hour: both scenarios start at the same temperature.
   const later = plan.length > 1 ? plan.slice(1) : plan;
   const peakPlan = Math.max(...later.map((h) => h.indoorPlan));
@@ -162,7 +185,105 @@ export function summarize(plan) {
     nextChange: nextChange === -1 ? null : plan[nextChange],
     airHours: plan.filter((h) => h.reason === 'air').length,
     bestAir: bestAirHour(plan),
+    coldHours: plan.filter((h) => h.reason === 'cold').length,
+    warmest: warmestAiringHour(plan),
+    tonight: overnight(plan),
+    curtains: curtainHours(plan, s),
+    energy: energySaved(plan, s),
   };
+}
+
+const isNight = (time) => {
+  const h = hourOf(time);
+  return h >= 21 || h < 7;
+};
+const BLOCKING = new Set(['rain', 'wind', 'air', 'pollen']);
+
+// The first night (21:00–07:00) in the plan, and its longest open stretch.
+export function overnight(plan) {
+  const startIdx = plan.findIndex((h) => isNight(h.time));
+  if (startIdx === -1) return null;
+  let endIdx = startIdx;
+  while (endIdx + 1 < plan.length && isNight(plan[endIdx + 1].time)) endIdx++;
+  const night = plan.slice(startIdx, endIdx + 1);
+  let best = null;
+  let run = null;
+  for (const h of night) {
+    if (h.open) {
+      run = run ? { ...run, end: h, hours: run.hours + 1 } : { start: h, end: h, hours: 1 };
+      if (!best || run.hours > best.hours) best = run;
+    } else run = null;
+  }
+  const reasons = night.filter((h) => !h.open).map((h) => h.reason);
+  const mainReason = reasons.sort((a, b) => reasons.filter((r) => r === b).length - reasons.filter((r) => r === a).length)[0];
+  return {
+    start: night[0],
+    end: night[night.length - 1],
+    hours: night.length,
+    openHours: night.filter((h) => h.open).length,
+    best, // longest open stretch, or null
+    closedBecause: best ? null : night.find((h) => h.reason === mainReason) || null,
+  };
+}
+
+// On cold days the window stays shut; air out briefly at the warmest safe hour.
+export function warmestAiringHour(plan) {
+  const ok = plan.filter((h) => !BLOCKING.has(h.reason));
+  if (!ok.length) return null;
+  return ok.reduce((best, h) => (h.temp > best.temp ? h : best));
+}
+
+// Daytime hours when the window is closed and the sun shines on it:
+// closing curtains or blinds then keeps a lot of heat out.
+export function curtainHours(plan, settings = {}) {
+  const s = { ...DEFAULT_SETTINGS, ...settings };
+  if (s.sun === 'shade') return null;
+  // Only when the room is warm: on cold days, sun heat is welcome.
+  const wanted = (h) =>
+    !h.open && sunGain(hourOf(h.time), s.sun) > 0.25 && (h.cloud ?? 0) < 70 && h.indoorPlan > s.comfortMax - 2;
+  const first = plan.findIndex(wanted);
+  if (first === -1) return null;
+  let last = first;
+  while (last + 1 < plan.length && wanted(plan[last + 1])) last++;
+  return { from: plan[first], to: plan[last], hours: last - first + 1 };
+}
+
+// Hours an AC would run to keep the room under comfortMax, with the window
+// shut vs. following the plan. The difference is the AC time the plan saves.
+export function energySaved(plan, settings = {}) {
+  const s = { ...DEFAULT_SETTINGS, ...settings };
+  const later = plan.length > 1 ? plan.slice(1) : plan;
+  const shutHot = later.filter((h) => h.indoorShut > s.comfortMax).length;
+  const planHot = later.filter((h) => h.indoorPlan > s.comfortMax).length;
+  const hours = Math.max(0, shutHot - planHot);
+  const kwh = hours * s.acKw;
+  return { hours, kwh: round(kwh), money: Math.round(kwh * s.tariff), co2: round(kwh * GRID_CO2), currency: s.currency };
+}
+
+// One summary per calendar day for the multi-day outlook.
+export function daySummaries(plan) {
+  const days = new Map();
+  for (const h of plan) {
+    const d = h.time.slice(0, 10);
+    if (!days.has(d)) days.set(d, []);
+    days.get(d).push(h);
+  }
+  return [...days.entries()].map(([date, hours]) => {
+    const temps = hours.map((h) => h.temp);
+    const aqis = hours.map((h) => h.aqi).filter((v) => v != null);
+    const nightStart = plan.findIndex((h) => h.time.slice(0, 10) === date && hourOf(h.time) >= 21);
+    return {
+      date,
+      hours: hours.length,
+      openHours: hours.filter((h) => h.open).length,
+      max: round(Math.max(...temps)),
+      min: round(Math.min(...temps)),
+      maxAqi: aqis.length ? Math.max(...aqis) : null,
+      rainHours: hours.filter((h) => h.reason === 'rain').length,
+      windHours: hours.filter((h) => h.reason === 'wind').length,
+      night: nightStart === -1 ? null : overnight(plan.slice(nightStart)),
+    };
+  });
 }
 
 // On bad-air days the plan may never open the window. Rooms still need

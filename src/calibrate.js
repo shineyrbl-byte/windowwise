@@ -41,7 +41,7 @@ export function replay(from, to, series, params) {
   for (let k = 0; k < steps; k++) {
     const out = byHour.get(startHour + k);
     if (!out) return null; // no weather data for this hour
-    indoor = step(indoor, out.temp, to.open, out.hour, params);
+    indoor = step(indoor, out.temp, to.open, out.hour, params, out.cloud);
   }
   return indoor;
 }

@@ -58,6 +58,8 @@ export function mergeHourly(weather, air, hours = 24) {
       humidity: w.relative_humidity_2m[i],
       rainProb: w.precipitation_probability[i],
       wind: w.wind_speed_10m[i],
+      gust: w.wind_gusts_10m?.[i] ?? null,
+      cloud: w.cloud_cover?.[i] ?? null,
       aqi: a.aqi ?? null,
       pm25: a.pm25 ?? null,
       pollen: a.pollen ?? null,
@@ -66,10 +68,10 @@ export function mergeHourly(weather, air, hours = 24) {
 }
 
 export async function fetchHours(lat, lon, fetchFn = fetch) {
-  const q = `latitude=${lat}&longitude=${lon}&timezone=auto&forecast_days=2`;
+  const q = `latitude=${lat}&longitude=${lon}&timezone=auto&forecast_days=7`;
   const weatherUrl =
     `${FORECAST}?${q}&past_days=1&current=temperature_2m` +
-    '&hourly=temperature_2m,apparent_temperature,relative_humidity_2m,precipitation_probability,wind_speed_10m';
+    '&hourly=temperature_2m,apparent_temperature,relative_humidity_2m,precipitation_probability,wind_speed_10m,wind_gusts_10m,cloud_cover';
   const airUrl = `${AIR}?${q}&hourly=us_aqi,pm2_5,${POLLEN_TYPES.map((t) => `${t}_pollen`).join(',')}`;
 
   const [wRes, aRes] = await Promise.all([fetchFn(weatherUrl), fetchFn(airUrl).catch(() => null)]);
@@ -80,11 +82,14 @@ export async function fetchHours(lat, lon, fetchFn = fetch) {
   const offset = weather.utc_offset_seconds ?? 0;
   return {
     hours: mergeHourly(weather, air),
+    // The rest of the week, for the multi-day outlook.
+    week: mergeHourly(weather, air, Infinity),
     // Every hour including yesterday, used to calibrate against past readings.
     series: weather.hourly.time.map((t, i) => ({
       at: toEpoch(t, offset),
       hour: Number(t.slice(11, 13)),
       temp: weather.hourly.temperature_2m[i],
+      cloud: weather.hourly.cloud_cover?.[i] ?? 0,
     })),
     timezone: weather.timezone,
     utcOffset: weather.utc_offset_seconds ?? 0,

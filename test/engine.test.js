@@ -141,3 +141,94 @@ describe('pollen', () => {
     expect(decideHour(hour({ temp: 22, pollen: null }), 28, { pollenAllergy: true }).open).toBe(true);
   });
 });
+
+import { overnight, warmestAiringHour, curtainHours, energySaved, daySummaries } from '../src/engine.js';
+
+describe('more rules', () => {
+  it('closes for strong wind gusts', () => {
+    expect(decideHour(hour({ temp: 22, gust: 70 }), 28)).toMatchObject({ open: false, reason: 'wind' });
+    expect(decideHour(hour({ temp: 22, gust: 30 }), 28).open).toBe(true);
+  });
+
+  it('damp mode dries the room with drier outside air, even if warmer', () => {
+    expect(decideHour(hour({ temp: 30, humidity: 55 }), 27, { damp: true })).toMatchObject({ open: true, reason: 'dry' });
+    expect(decideHour(hour({ temp: 22, humidity: 92 }), 28, { damp: true })).toMatchObject({ open: false, reason: 'damp' });
+    expect(decideHour(hour({ temp: 30, humidity: 55 }), 27).open).toBe(false);
+  });
+
+  it('cross-ventilation and a fan both speed up airing', () => {
+    const base = modelParams({}).openMix;
+    expect(modelParams({ crossVent: true }).openMix).toBeGreaterThan(base);
+    expect(modelParams({ crossVent: true, fan: true }).openMix).toBeGreaterThan(modelParams({ crossVent: true }).openMix);
+  });
+
+  it('curtains and clouds cut sun heat', () => {
+    const p = modelParams({ sun: 'afternoon' });
+    const pc = modelParams({ sun: 'afternoon', curtains: true });
+    const clear = step(28, 28, false, 15, p, 0);
+    expect(step(28, 28, false, 15, pc, 0)).toBeLessThan(clear);
+    expect(step(28, 28, false, 15, p, 100)).toBeLessThan(clear);
+  });
+});
+
+describe('summaries', () => {
+  const night = (i, open) => ({ time: `2026-11-09T${String(i).padStart(2, '0')}:00`, open, reason: open ? 'cool' : 'heat', temp: 20 + i / 2 });
+  const plan = [18, 19, 20, 21, 22, 23].map((i) => night(i, i >= 22)).concat(
+    [0, 1, 2, 3, 4, 5, 6, 7].map((i) => ({ ...night(i, i <= 5), time: `2026-11-10T${String(i).padStart(2, '0')}:00` })),
+  );
+
+  it('finds the longest open stretch tonight', () => {
+    const o = overnight(plan);
+    expect(o.best.start.time).toBe('2026-11-09T22:00');
+    expect(o.best.end.time).toBe('2026-11-10T05:00');
+    expect(o.best.hours).toBe(8);
+  });
+
+  it('reports why the window stays shut all night', () => {
+    const o = overnight(plan.map((h) => ({ ...h, open: false, reason: 'air' })));
+    expect(o.best).toBeNull();
+    expect(o.closedBecause.reason).toBe('air');
+  });
+
+  it('picks the warmest safe hour on cold days', () => {
+    const p = [
+      { time: 'a', temp: 10, reason: 'cold' },
+      { time: 'b', temp: 15, reason: 'rain' },
+      { time: 'c', temp: 13, reason: 'cold' },
+    ];
+    expect(warmestAiringHour(p).time).toBe('c');
+  });
+
+  it('suggests curtains for sunny closed hours', () => {
+    const p = makePlan(day, { startIndoor: 30, sun: 'afternoon' });
+    const c = curtainHours(p, { sun: 'afternoon' });
+    expect(c.hours).toBeGreaterThan(0);
+    expect(curtainHours(p, { sun: 'shade' })).toBeNull();
+    // A cold room wants the sun's heat.
+    const cold = makePlan(day.map((h) => ({ ...h, temp: h.temp - 15 })), { startIndoor: 15, sun: 'afternoon' });
+    expect(curtainHours(cold, { sun: 'afternoon' })).toBeNull();
+    // One stretch only, never wrapping into the next day.
+    expect(c.to.time >= c.from.time).toBe(true);
+  });
+
+  it('counts AC hours, energy and money the plan saves', () => {
+    const p = [
+      { indoorPlan: 30, indoorShut: 30 },
+      { indoorPlan: 25, indoorShut: 29 },
+      { indoorPlan: 27, indoorShut: 29 },
+      { indoorPlan: 24, indoorShut: 25 },
+    ];
+    expect(energySaved(p, { comfortMax: 26, acKw: 1, tariff: 10 })).toMatchObject({ hours: 1, kwh: 1, money: 10 });
+  });
+
+  it('summarises each day', () => {
+    const p = makePlan(
+      Array.from({ length: 48 }, (_, i) => hour({ time: `2026-11-${i < 24 ? '09' : '10'}T${String(i % 24).padStart(2, '0')}:00`, temp: 20 + (i % 24) / 2, aqi: 50 + i })),
+      { startIndoor: 28 },
+    );
+    const days = daySummaries(p);
+    expect(days).toHaveLength(2);
+    expect(days[0]).toMatchObject({ date: '2026-11-09', hours: 24, min: 20, maxAqi: 73 });
+    expect(days[0].night).not.toBeNull();
+  });
+});
