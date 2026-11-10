@@ -5,6 +5,7 @@ import { renderChart, renderLog } from './chart.js';
 import { toQuery, fromQuery } from './share.js';
 import { calibrate, describeKeys } from './calibrate.js';
 import { createScheduler, notifySupport, showNotification } from './notify.js';
+import { validWebhook, sendWebhook } from './webhook.js';
 import { t, setLang, getLang, LANGS } from './i18n.js';
 import { clock, endClock, reasonText } from './format.js';
 
@@ -32,8 +33,20 @@ let lastPlan = null;
 let refreshTimer = null;
 let statusKey = null; // so status messages can be re-translated
 
-const notifyChange = (change, placeName) =>
-  showNotification(change, placeName, { title: t(change.open ? 'n_open' : 'n_close'), body: `${reasonText(change.hour)}.` });
+const notifyChange = (change, name) => {
+  if (state.remind && notifySupport() === 'granted') {
+    showNotification(change, name, { title: t(change.open ? 'n_open' : 'n_close'), body: `${reasonText(change.hour)}.` });
+  }
+  if (state.webhook && validWebhook(state.webhook)) {
+    sendWebhook(state.webhook, {
+      action: change.open ? 'open' : 'close',
+      place: name,
+      reason: change.reason,
+      text: reasonText(change.hour),
+      time: change.time,
+    }).catch(() => {});
+  }
+};
 const scheduler = createScheduler({ show: notifyChange });
 
 // Needed for notifications on Android and for installing as an app.
@@ -266,6 +279,26 @@ function initSettings() {
     state.sensitive = e.target.checked;
     settingsChanged();
   });
+  $('webhook').value = state.webhook || '';
+  $('webhook').addEventListener('change', (e) => {
+    const url = e.target.value.trim();
+    if (url && !validWebhook(url)) return status('hook_invalid', {}, true);
+    state.webhook = url || null;
+    save();
+    startRefresh();
+    rerender();
+    if (url) status('hook_saved');
+  });
+  $('hook-test').addEventListener('click', async () => {
+    const url = $('webhook').value.trim();
+    if (!validWebhook(url)) return status('hook_invalid', {}, true);
+    try {
+      await sendWebhook(url, { action: 'test', place: state.place ? placeName(state.place) : '', reason: 'test', text: 'WindowWise test', time: new Date().toISOString() });
+      status('hook_sent');
+    } catch {
+      status('hook_failed', {}, true);
+    }
+  });
   syncForm();
 }
 
@@ -425,7 +458,9 @@ function render(hours) {
   const sum = summarize(plan, s);
   const days = lastWeek.length ? daySummaries(makePlan(lastWeek, s)).slice(0, 7) : [];
   const nextReminder =
-    state.remind && notifySupport() === 'granted' ? scheduler.schedule(plan, lastOffset, placeName(state.place)) : (scheduler.clear(), null);
+    (state.remind && notifySupport() === 'granted') || validWebhook(state.webhook || '')
+      ? scheduler.schedule(plan, lastOffset, placeName(state.place))
+      : (scheduler.clear(), null);
   const blocks = toBlocks(plan);
   const first = plan[0].time;
   const now = sum.now;
@@ -625,7 +660,7 @@ function remindHtml(next, first) {
 
 function startRefresh() {
   clearInterval(refreshTimer);
-  refreshTimer = state.remind ? setInterval(() => state.place && choose(state.place, true), 30 * 60 * 1000) : null;
+  refreshTimer = state.remind || state.webhook ? setInterval(() => state.place && choose(state.place, true), 30 * 60 * 1000) : null;
 }
 
 $('out').addEventListener('click', async (e) => {

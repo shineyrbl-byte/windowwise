@@ -98,6 +98,12 @@
             <input id="large" type="checkbox" />
             <span data-i18n="large">Larger text</span>
           </label>
+          <p class="group-h" data-i18n="hook_h">Smart home (advanced)</p>
+          <label class="wide"><span data-i18n="hook_label">Webhook URL to call when it's time to open or close</span>
+            <input id="webhook" type="url" inputmode="url" placeholder="https://…" autocomplete="off" />
+          </label>
+          <p class="small wide" data-i18n="hook_help"></p>
+          <div class="row wide"><button type="button" class="ghost" id="hook-test" data-i18n="hook_test">Send a test</button></div>
           <p class="group-h" data-i18n="energy_h">AC savings estimate</p>
           <label><span data-i18n="tariff">Electricity price per kWh</span>
             <input id="tariff" type="number" step="0.5" min="0" max="1000" />
