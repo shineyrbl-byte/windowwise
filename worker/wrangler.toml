@@ -1,0 +1,17 @@
+# WindowWise API: a small Cloudflare Worker for the features that need a server
+# (live hostel plans, community readings, ground sensors, push and Telegram).
+name = "windowwise-api"
+main = "index.js"
+compatibility_date = "2026-10-01"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "windowwise"
+database_id = "396e9405-63e7-4a41-92d1-dbf27c8ef6dd"
+
+# Check every 10 minutes whether anyone's window plan changes soon.
+[triggers]
+crons = ["*/10 * * * *"]
+
+[vars]
+ALLOWED_ORIGINS = "https://shineyrbl-byte.github.io,http://localhost:5179,http://localhost:5173,http://localhost:4173"
