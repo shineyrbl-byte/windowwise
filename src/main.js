@@ -6,6 +6,7 @@ import { toQuery, fromQuery } from './share.js';
 import { calibrate, describeKeys } from './calibrate.js';
 import { createScheduler, notifySupport, showNotification } from './notify.js';
 import { t, setLang, getLang, LANGS } from './i18n.js';
+import { clock, endClock, reasonText } from './format.js';
 
 const $ = (id) => document.getElementById(id);
 const STORE = 'windowwise:v1';
@@ -57,9 +58,6 @@ function save() {
 // ---------- helpers ----------
 const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
 const lowerFirst = (s) => (getLang() === 'en' ? s.charAt(0).toLowerCase() + s.slice(1) : s);
-const clock = (time) => `${String(hourOf(time)).padStart(2, '0')}:00`;
-// The end of an hour block: a block ending at the 05:00 hour lasts until 06:00.
-const endClock = (time) => `${String((hourOf(time) + 1) % 24).padStart(2, '0')}:00`;
 const LOCALES = { en: 'en-IN', hi: 'hi-IN', mr: 'mr-IN', ta: 'ta-IN', te: 'te-IN', kn: 'kn-IN', bn: 'bn-IN' };
 const weekday = (date) => new Date(`${date}T12:00:00Z`).toLocaleDateString(LOCALES[getLang()] || 'en-IN', { weekday: 'short', day: 'numeric', timeZone: 'UTC' });
 const dayLabel = (time, first) => (time.slice(0, 10) === first.slice(0, 10) ? '' : ` ${t('tomorrow')}`);
@@ -81,38 +79,6 @@ function aqiBand(aqi) {
   if (aqi <= 150) return { label: t('aqi_sensitive'), cls: 'warn' };
   if (aqi <= 200) return { label: t('aqi_unhealthy'), cls: 'bad' };
   return { label: t('aqi_very'), cls: 'bad' };
-}
-
-// The engine gives a reason code; the sentence is built here so it can be translated.
-function reasonText(h) {
-  switch (h.reason) {
-    case 'rain':
-      return t('r_rain', { p: h.rainProb });
-    case 'air':
-      return t('r_air', { aqi: h.aqi });
-    case 'pollen': {
-      const risk = pollenRisk(h.pollen);
-      return t('r_pollen', { name: t(`pollen_${risk.type}`), v: Math.round(risk.value) });
-    }
-    case 'cold':
-      return t('r_cold', { t: round(h.temp) });
-    case 'muggy':
-      return t('r_muggy', { h: h.humidity });
-    case 'cool':
-      return t('r_cool', { t: round(h.temp) });
-    case 'heat':
-      return t('r_heat', { t: round(h.temp) });
-    case 'fresh':
-      return t('r_fresh');
-    case 'wind':
-      return t('r_wind', { g: Math.round(h.gust) });
-    case 'damp':
-      return t('r_damp', { h: h.humidity });
-    case 'dry':
-      return t('r_dry', { h: h.humidity });
-    default:
-      return h.text || '';
-  }
 }
 
 function baseSettings() {
@@ -581,6 +547,7 @@ function render(hours) {
       <div class="row">
         <button type="button" data-act="share">${t('share')}</button>
         <button type="button" class="ghost" data-act="print">${t('print')}</button>
+        <button type="button" class="ghost" data-act="embed">${t('embed_copy')}</button>
       </div>
     </section>
     ${airTip}
@@ -677,6 +644,17 @@ $('out').addEventListener('click', async (e) => {
     const u = new SpeechSynthesisUtterance(text);
     u.lang = LOCALES[getLang()] || 'en-IN';
     speechSynthesis.speak(u);
+    return;
+  } else if (act === 'embed') {
+    const base = location.pathname.replace(/[^/]*$/, '');
+    const src = `${location.origin}${base}embed.html?${toQuery(state.place, state.settings, state.sensitive)}&lang=${getLang()}`;
+    const code = `<iframe src="${src}" width="360" height="230" style="border:0;border-radius:12px" title="WindowWise"></iframe>`;
+    try {
+      await navigator.clipboard.writeText(code);
+      status('embed_copied');
+    } catch {
+      status('copy_this', { url: code });
+    }
     return;
   } else if (act === 'print') {
     window.print();
