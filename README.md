@@ -47,6 +47,11 @@ Weather apps show temperature and AQI on separate screens. None of them answer t
 23. **Accessibility:** high contrast, larger text, read-aloud and a simple view with just the answer.
 24. **Embeddable widget:** one line of code puts a live WindowWise card on a hostel or college website.
 25. **Smart-home webhook:** call IFTTT, Home Assistant or similar when it's time to open or close.
+26. **Push reminders when the app is closed:** a small server checks every 10 minutes and sends a web push when it's time to open or close.
+27. **Telegram reminders:** link the app to the WindowWise Telegram bot with one tap and get the same reminders as messages. Send `/stop` to turn them off.
+28. **Live hostel plan:** a warden publishes a plan once; everyone who opens the link follows it, and changes reach them automatically.
+29. **Community rooms:** share your calibrated room model anonymously (location rounded to about 10 km). New users nearby start from the median of at least 3 rooms instead of a guess.
+30. **Ground-station air quality:** the current AQI comes from the nearest government sensor (CPCB in India, AirNow in the US and others, via OpenAQ) when a fresh reading exists.
 
 ## How it decides
 
@@ -80,7 +85,13 @@ Each thermometer reading records the time, the temperature, and whether the wind
 
 ## Reminders: how they work
 
-GitHub Pages can't run a server, so WindowWise schedules notifications in the browser. A service worker shows them (this is required on Android) and opens the app when one is tapped. Reminders arrive while WindowWise is open in a tab, even in the background, or installed as an app. They can't arrive while it's fully closed (see Limitations).
+There are three channels, and they back each other up:
+
+1. **In the app:** the browser schedules notifications while WindowWise is open or installed. This needs no server.
+2. **Web push:** a Cloudflare Worker runs every 10 minutes, fetches the forecast for each subscribed place, runs the same decision engine as the app (`src/engine.js` is shared) and sends a push a few minutes before each change. The push carries no data; the service worker fetches the message text from the server, so no payload encryption is needed. Each reminder is sent only once.
+3. **Telegram:** the same server sends the reminder as a Telegram message, in your language.
+
+If the server is down or unreachable, the app keeps working with in-app reminders, the modelled AQI and local settings.
 
 ## Screenshots
 
@@ -95,8 +106,11 @@ _Add screenshots of the main screen, the hour strip and the chart here._
 - Web Share API, Clipboard API and print styles for hostel mode; an iframe widget
 - Web Bluetooth (Environmental Sensing service) and the Web Speech API
 - Languages load on demand with dynamic imports
-- 63 [Vitest](https://vitest.dev/) unit tests: decision rules, room model, calibration, summaries, data merging, reminders, webhooks, share links, and a check that every language has every string
+- 75 [Vitest](https://vitest.dev/) unit tests: decision rules, room model, calibration, summaries, data merging, reminders, webhooks, share links, the server (push signing, validation, sensor selection, reminder timing), and a check that every language has every string
 - GitHub Actions runs the tests, builds and deploys to GitHub Pages on every push
+- Server: a [Cloudflare Worker](https://workers.cloudflare.com/) with a [D1](https://developers.cloudflare.com/d1/) (SQLite) database and a 10-minute cron trigger
+- Web Push with VAPID keys signed using WebCrypto (no libraries)
+- [Telegram Bot API](https://core.telegram.org/bots/api) and [OpenAQ v3](https://docs.openaq.org/) for ground-station PM2.5
 
 ```
 src/engine.js     decision rules, room model, summaries (tonight, week, AC savings...)
@@ -111,7 +125,9 @@ src/format.js     shared text helpers
 src/chart.js      SVG charts
 src/main.js       interface
 src/embed.js      embeddable widget (embed.html)
-public/sw.js      service worker: notifications and offline cache
+src/api.js        server client (falls back quietly when offline)
+public/sw.js      service worker: notifications, push and offline cache
+worker/           Cloudflare Worker: plans, community, push, Telegram, sensors, cron reminders
 test/             unit tests
 ```
 
@@ -128,19 +144,39 @@ npm test         # run the unit tests
 npm run build    # production build in dist/
 ```
 
-No API keys or accounts are needed.
+No API keys or accounts are needed for the app. The server features are optional.
+
+### Server (optional)
+
+```bash
+cd windowwise
+npx wrangler login
+npx wrangler d1 create windowwise          # put the id in worker/wrangler.toml
+npx wrangler d1 execute windowwise --remote --file worker/schema.sql --config worker/wrangler.toml
+npx wrangler deploy --config worker/wrangler.toml
+```
+
+Secrets, each set with `npx wrangler secret put NAME --config worker/wrangler.toml`. Every feature switches off cleanly when its secret is missing:
+
+- `VAPID_PRIVATE_JWK`: private key for web push (put the public key in `VAPID_PUBLIC` in wrangler.toml)
+- `TELEGRAM_TOKEN`: from @BotFather
+- `OPENAQ_KEY`: from explore.openaq.org
+
+Then set `API_BASE` in `src/api.js` to your Worker URL.
 
 ## Limitations
 
 - **The room temperature is an estimate.** Setting when your window gets sun and logging a few thermometer readings makes it much closer to your room, but it is still a model.
-- **Reminders need WindowWise open or installed.** Without a server, notifications can't arrive while the app is fully closed. On iPhone, notifications only work after adding WindowWise to the home screen (iOS 16.4 or newer).
-- **AQI is modelled data** from Open-Meteo (CAMS), not a sensor on your street. It can differ from local readings.
+- **Push can be blocked.** School- or work-managed browsers and some campus networks block the push service, so pushes never arrive. In-app reminders and Telegram still work there. On iPhone, push only works after adding WindowWise to the home screen (iOS 16.4 or newer).
+- **Free-plan limits:** each 10-minute server run fetches forecasts for at most 15 places, so reminders could be late if many cities have subscribers.
+- **Ground stations** only cover the current hour, and only where a station within 25 km reported in the last 3 hours. Forecast hours still use modelled data.
+- **Forecast AQI is modelled data** from Open-Meteo (CAMS), not a sensor on your street. It can differ from local readings.
 - **US AQI is a 24-hour average,** so it changes slowly. The least-polluted-hour tip uses hourly PM2.5 for this reason.
 - **Pollen data covers Europe only.** Elsewhere the pollen setting has no effect, and the app says so.
 - **Translations** were written with AI help and should be reviewed by native speakers.
 - **Bluetooth** only works with thermometers that use the standard Environmental Sensing service, in Chrome or Edge (not iPhone or Firefox). I couldn't test it with real hardware.
 - **AC savings are rough:** they assume a typical 1.5-ton AC; set your own power use and price in settings.
-- **The smart-home webhook** fires from the device, like reminders, so the app must be open or installed.
+- **The smart-home webhook** fires from the device, so the app must be open or installed.
 - **Air-quality forecasts** run about 5 days ahead, so the last days of the outlook show no AQI.
 - WindowWise is a guide, not medical advice. On bad-air days, follow local health guidance.
 
@@ -152,14 +188,12 @@ No API keys or accounts are needed.
 
 ## Not built (and why)
 
-- **Notifications when the app is fully closed** need a push server, and GitHub Pages can't run one.
-- **Live ground sensors (CPCB, OpenAQ):** these need an API key, and a key can't be kept secret in a site with no server.
-- **A live shared hostel plan** (a warden changes it once, everyone updates) and **community room readings** need a database.
-- **WhatsApp or Telegram reminders** need a bot account and a server to send messages while the app is closed.
+- **WhatsApp reminders** need a verified WhatsApp Business account and paid message templates. Telegram does the same job for free.
 - **Other Bluetooth sensors:** many cheap thermometers use their own private formats instead of the standard one.
 
 ## Credits
 
+- Ground-station air quality: [OpenAQ](https://openaq.org/) (data from CPCB, AirNow and other agencies)
 - Weather, air quality and geocoding data: [Open-Meteo](https://open-meteo.com/), licensed under [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/)
 - Build tools: Vite and Vitest (MIT)
 - AI assistance: Claude (Anthropic) via Claude Code helped write code, tests and documentation.
