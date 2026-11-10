@@ -274,3 +274,10 @@ html.d-simple .why, html.d-simple .next { font-size: 1.3rem; }
 
 .fields .wide { grid-column: 1 / -1; }
 input[type='url'] { font: inherit; color: var(--ink); background: var(--bg); border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; width: 100%; }
+
+/* live plans + community */
+.live { border-left: 4px solid var(--accent); }
+.live p { margin: 0 0 10px; }
+.live-help { margin: 12px 0 8px; }
+.share-room { display: flex; gap: 10px; align-items: flex-start; margin-top: 12px; font-size: 0.92rem; }
+.share-room input { width: 20px; height: 20px; flex: none; accent-color: var(--accent); }

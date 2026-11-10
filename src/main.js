@@ -6,6 +6,7 @@ import { toQuery, fromQuery } from './share.js';
 import { calibrate, describeKeys } from './calibrate.js';
 import { createScheduler, notifySupport, showNotification } from './notify.js';
 import { validWebhook, sendWebhook } from './webhook.js';
+import * as api from './api.js';
 import { t, setLang, getLang, LANGS } from './i18n.js';
 import { clock, endClock, reasonText } from './format.js';
 
@@ -14,6 +15,12 @@ const STORE = 'windowwise:v1';
 const CACHE_KEY = 'windowwise:forecast'; // last forecast, for offline use
 
 const state = load() || { place: null, settings: { ...DEFAULT_SETTINGS }, sensitive: false };
+// A live plan link (?plan=ID) follows a plan kept on the server.
+const planParam = new URLSearchParams(location.search).get('plan');
+if (planParam && /^[A-Za-z0-9]{6,12}$/.test(planParam)) {
+  state.follow = planParam;
+  history.replaceState(null, '', location.pathname);
+}
 // A shared hostel link sets the place and room settings for this device.
 const shared = fromQuery(location.search);
 if (shared) {
@@ -28,6 +35,9 @@ let lastWeek = [];
 let lastOffset = 0;
 let lastSeries = [];
 let calibration = null;
+let community = null; // median calibrated room near this place, from other users
+let livePlan = null; // the live plan being followed, as last fetched
+let apiFeatures = {};
 let lastPlan = null;
 let refreshTimer = null;
 let statusKey = null; // so status messages can be re-translated
@@ -98,8 +108,17 @@ function baseSettings() {
 }
 
 // Base settings plus anything learned from thermometer readings.
+// Nearby community rooms are a better default than the generic model,
+// but your own calibration always wins.
+function communityParams() {
+  if (!community || community.n < 3) return null;
+  const out = {};
+  for (const k of ['closedMix', 'sunScale', 'openMix']) if (community[k] != null) out[k] = community[k];
+  return out;
+}
+
 function settings() {
-  const s = { ...baseSettings(), ...(calibration || {}) };
+  const s = { ...baseSettings(), ...(calibration || communityParams() || {}) };
   const latest = placeReadings().at(-1);
   if (latest && Date.now() - latest.at < 3 * 3600 * 1000) s.startIndoor = latest.temp;
   return s;
@@ -150,6 +169,29 @@ function placeReadings() {
 function updateCalibration() {
   calibration = lastSeries.length ? calibrate(placeReadings(), lastSeries, baseSettings()) : null;
   updateCalibrationText();
+  shareCalibration();
+}
+
+// Opt-in: send this room's calibration (no readings, ~11 km location).
+function shareCalibration() {
+  if (!state.shareRoom || !calibration || !state.place) return;
+  const room = {
+    device: api.deviceId(state),
+    lat: state.place.lat,
+    lon: state.place.lon,
+    sun: state.settings.sun || 'unsure',
+    closedMix: calibration.closedMix ?? null,
+    sunScale: calibration.sunScale ?? null,
+    openMix: calibration.openMix ?? null,
+  };
+  const sig = JSON.stringify(room);
+  if (sig === state.sharedSig) return;
+  api.shareRoom(room).then((r) => {
+    if (r) {
+      state.sharedSig = sig;
+      save();
+    }
+  });
 }
 
 function updateCalibrationText() {
@@ -165,6 +207,7 @@ function updateCalibrationText() {
     : calibration
       ? t('calib_done', { n: readings.length, p: pairs, desc })
       : t('calib_more', { n: readings.length });
+  if (!calibration && communityParams()) $('calib-status').textContent += ` ${t('community_using', { n: community.n })}`;
 }
 
 $('calib-form').addEventListener('submit', (e) => {
@@ -204,6 +247,16 @@ if (navigator.bluetooth) {
   });
 }
 
+$('shareRoom').addEventListener('change', (e) => {
+  state.shareRoom = e.target.checked;
+  if (!state.shareRoom && state.device) {
+    api.unshareRoom(state.device);
+    state.sharedSig = null;
+  }
+  save();
+  shareCalibration();
+});
+
 $('calib-reset').addEventListener('click', () => {
   const p = state.place;
   state.readings = (state.readings || []).filter((r) => !p || Math.abs(r.lat - p.lat) >= 0.05 || Math.abs(r.lon - p.lon) >= 0.05);
@@ -220,7 +273,27 @@ const CHECK_FIELDS = ['fan', 'pollenAllergy', 'crossVent', 'curtains', 'damp'];
 const placeKey = (p) => `${Number(p.lat).toFixed(2)},${Number(p.lon).toFixed(2)}`;
 const isSaved = (p) => !!p && (state.saved || []).some((x) => placeKey(x) === placeKey(p));
 
+// Settings that a live plan shares (personal ones like electricity price stay local).
+const PLAN_KEYS = ['sun', 'fan', 'pollenAllergy', 'crossVent', 'curtains', 'damp', 'comfortMax', 'comfortMin'];
+const planSettings = () => Object.fromEntries(PLAN_KEYS.filter((k) => state.settings[k] != null).map((k) => [k, state.settings[k]]));
+const isOwner = () => !!state.follow && state.owned?.id === state.follow;
+
+let planTimer = null;
+function schedulePlanUpdate() {
+  if (!isOwner() || !state.place) return;
+  clearTimeout(planTimer);
+  planTimer = setTimeout(() => {
+    api.updatePlan(state.owned.id, state.owned.key, {
+      name: placeName(state.place),
+      place: state.place,
+      settings: planSettings(),
+      sensitive: !!state.sensitive,
+    });
+  }, 1500);
+}
+
 function settingsChanged() {
+  schedulePlanUpdate();
   if (isSaved(state.place)) {
     state.placeSettings = { ...(state.placeSettings || {}), [placeKey(state.place)]: { ...state.settings, sensitive: state.sensitive } };
   }
@@ -234,6 +307,7 @@ function syncForm() {
   $('sun').value = state.settings.sun || 'unsure';
   $('currency').value = state.settings.currency ?? DEFAULT_SETTINGS.currency;
   $('sensitive').checked = !!state.sensitive;
+  $('shareRoom').checked = !!state.shareRoom;
 }
 
 const DISPLAY = ['simple', 'contrast', 'large'];
@@ -375,6 +449,20 @@ $('locate').addEventListener('click', () => {
 });
 
 async function choose(place, quiet = false) {
+  // Following someone else's live plan: their place and settings win.
+  if (state.follow && !isOwner()) {
+    const p = await api.getPlan(state.follow);
+    if (p) {
+      livePlan = p;
+      place = p.place;
+      for (const k of PLAN_KEYS) state.settings[k] = p.settings[k] ?? DEFAULT_SETTINGS[k];
+      state.sensitive = !!p.sensitive;
+      syncForm();
+    } else if (!place) {
+      return status('live_err', {}, true);
+    }
+  }
+  if (!place) return status('start_hint');
   const switched = !state.place || placeKey(state.place) !== placeKey(place);
   state.place = place;
   const own = state.placeSettings?.[placeKey(place)];
@@ -394,6 +482,14 @@ async function choose(place, quiet = false) {
     lastOffset = utcOffset;
     lastSeries = series;
     updateCalibration();
+    if (switched || !community) {
+      community = null;
+      api.nearbyRooms(place.lat, place.lon).then((r) => {
+        community = r;
+        updateCalibrationText();
+        rerender();
+      });
+    }
     const noPollen = state.settings.pollenAllergy && !hours.some((h) => h.pollen);
     if (offline) status('offline', { time: new Date(savedAt).toLocaleString(LOCALES[getLang()] || [], { weekday: 'short', hour: '2-digit', minute: '2-digit' }) });
     else if (!hasAir) status('no_air');
@@ -549,7 +645,27 @@ function render(hours) {
   const legendExtra = plan.some((h) => h.reason === 'pollen') ? ` <span class="key pollen"></span> ${t('closed_pollen')}` : '';
   const printedAt = new Date().toLocaleString(LOCALES[getLang()] || [], { dateStyle: 'medium', timeStyle: 'short' });
 
+  const ago = (ts) => {
+    const m = Math.max(1, Math.round((Date.now() - ts) / 60000));
+    return m < 60 ? t('ago_min', { n: m }) : m < 48 * 60 ? t('ago_h', { n: Math.round(m / 60) }) : t('ago_d', { n: Math.round(m / 1440) });
+  };
+  const liveBanner = state.follow
+    ? `<section class="card live no-print">
+        <p>${
+          isOwner()
+            ? t('live_owner', { name: esc(placeName(place)) })
+            : t('live_follow', { name: esc(livePlan?.name || placeName(place)), ago: livePlan ? ago(livePlan.updated) : '–' })
+        }</p>
+        <div class="row">
+          <button type="button" class="ghost small-btn" data-act="live-copy">${t('live_copy')}</button>
+          <button type="button" class="ghost small-btn" data-act="live-stop">${t('live_stop')}</button>
+        </div>
+      </section>`
+    : '';
+  const communityNote = !calibration && communityParams() ? ` <span class="small">${t('community_using', { n: community.n })}</span>` : '';
+
   $('out').innerHTML = `
+    ${liveBanner}
     <header class="print-only print-head">
       <h1>${t('print_title', { place: name })}</h1>
       <p>${t('print_sub', { from: clock(first), n: plan.length, at: esc(printedAt) })}</p>
@@ -574,7 +690,7 @@ function render(hours) {
     </section>
 
     ${tonightCard}
-    <section class="card benefit"><p>${benefit}${fanLine}${energyLine}</p></section>
+    <section class="card benefit"><p>${benefit}${fanLine}${energyLine}${communityNote}</p></section>
     ${remindHtml(nextReminder, first)}
     <section class="card share no-print" aria-labelledby="share-h">
       <h3 id="share-h">${t('share_title')}</h3>
@@ -584,6 +700,11 @@ function render(hours) {
         <button type="button" class="ghost" data-act="print">${t('print')}</button>
         <button type="button" class="ghost" data-act="embed">${t('embed_copy')}</button>
       </div>
+      ${
+        apiFeatures.plans && !state.follow
+          ? `<p class="small live-help">${t('live_help')}</p><div class="row"><button type="button" class="ghost" data-act="live-create">${t('live_create')}</button></div>`
+          : ''
+      }
     </section>
     ${airTip}
     ${coldTip}
@@ -658,9 +779,19 @@ function remindHtml(next, first) {
   return `<section class="card remind" aria-labelledby="remind-h"><h3 id="remind-h">${t('remind_title')}</h3>${body}</section>`;
 }
 
+async function copyLiveLink() {
+  const url = `${location.origin}${location.pathname}?plan=${state.follow}`;
+  try {
+    await navigator.clipboard.writeText(url);
+    status('live_copied');
+  } catch {
+    status('copy_this', { url });
+  }
+}
+
 function startRefresh() {
   clearInterval(refreshTimer);
-  refreshTimer = state.remind || state.webhook ? setInterval(() => state.place && choose(state.place, true), 30 * 60 * 1000) : null;
+  refreshTimer = state.remind || state.webhook || state.follow ? setInterval(() => state.place && choose(state.place, true), 30 * 60 * 1000) : null;
 }
 
 $('out').addEventListener('click', async (e) => {
@@ -680,6 +811,22 @@ $('out').addEventListener('click', async (e) => {
     u.lang = LOCALES[getLang()] || 'en-IN';
     speechSynthesis.speak(u);
     return;
+  } else if (act === 'live-create') {
+    const r = await api.createPlan({ name: placeName(state.place), place: state.place, settings: planSettings(), sensitive: !!state.sensitive });
+    if (!r) return status('live_err', {}, true);
+    state.owned = { id: r.id, key: r.editKey };
+    state.follow = r.id;
+    save();
+    startRefresh();
+    await copyLiveLink();
+  } else if (act === 'live-copy') {
+    await copyLiveLink();
+    return;
+  } else if (act === 'live-stop') {
+    state.follow = null;
+    livePlan = null;
+    save();
+    startRefresh();
   } else if (act === 'embed') {
     const base = location.pathname.replace(/[^/]*$/, '');
     const src = `${location.origin}${base}embed.html?${toQuery(state.place, state.settings, state.sensitive)}&lang=${getLang()}`;
@@ -729,8 +876,12 @@ async function start() {
   initSettings();
   applyLanguage();
   startRefresh();
-  if (state.place) {
-    $('q').value = isMine(state.place) ? '' : state.place.name;
+  api.features().then((f) => {
+    apiFeatures = f;
+    rerender();
+  });
+  if (state.place || state.follow) {
+    if (state.place) $('q').value = isMine(state.place) ? '' : state.place.name;
     choose(state.place);
   } else {
     status('start_hint');

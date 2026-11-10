@@ -3,7 +3,7 @@
 // - Keeps the app working offline: pages load from the network first (so a
 //   new version shows up right away) and fall back to the cache; built files
 //   have unique names, so they are served from the cache once stored.
-const CACHE = 'windowwise-v2';
+const CACHE = 'windowwise-v3';
 const SHELL = ['./', 'index.html', 'manifest.webmanifest', 'icon.svg', 'icon-192.png'];
 
 self.addEventListener('install', (event) => {
@@ -38,18 +38,22 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
+  // Built files under /assets/ have a content hash in their name, so a cached
+  // copy is always correct. Everything else (icons, manifest, dev files) goes
+  // to the network first and only falls back to the cache when offline.
+  const hashed = url.pathname.includes('/assets/');
+  const fromNetwork = () =>
+    fetch(req).then((res) => {
+      if (res.ok) {
+        const copy = res.clone();
+        caches.open(CACHE).then((c) => c.put(req, copy));
+      }
+      return res;
+    });
   event.respondWith(
-    caches.match(req).then(
-      (hit) =>
-        hit ||
-        fetch(req).then((res) => {
-          if (res.ok) {
-            const copy = res.clone();
-            caches.open(CACHE).then((c) => c.put(req, copy));
-          }
-          return res;
-        }),
-    ),
+    hashed
+      ? caches.match(req).then((hit) => hit || fromNetwork())
+      : fromNetwork().catch(() => caches.match(req)),
   );
 });
 
