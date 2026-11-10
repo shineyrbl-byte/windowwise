@@ -299,3 +299,20 @@ export function bestAirHour(plan) {
 }
 
 export const round = (n) => Math.round(n * 10) / 10;
+
+// US EPA PM2.5 AQI (2024 breakpoints), for ground-station readings.
+const PM25_BANDS = [
+  [0, 9.0, 0, 50],
+  [9.1, 35.4, 51, 100],
+  [35.5, 55.4, 101, 150],
+  [55.5, 125.4, 151, 200],
+  [125.5, 225.4, 201, 300],
+  [225.5, 325.4, 301, 500],
+];
+export function pm25ToAqi(pm) {
+  if (pm == null || !Number.isFinite(pm) || pm < 0) return null;
+  const c = Math.floor(pm * 10) / 10;
+  const band = PM25_BANDS.find(([lo, hi]) => c >= lo && c <= hi) || PM25_BANDS[PM25_BANDS.length - 1];
+  const [lo, hi, alo, ahi] = band;
+  return Math.min(500, Math.round(((ahi - alo) / (hi - lo)) * (Math.min(c, hi) - lo) + alo));
+}

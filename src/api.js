@@ -22,8 +22,10 @@ async function call(path, { method = 'GET', body, headers = {}, timeout = 6000 }
 }
 
 let healthPromise = null;
+const health = () => (healthPromise ||= call('/api/health').then((r) => r || {}));
 // Which server features are available ({ plans, community, sensors, push, telegram }).
-export const features = () => (healthPromise ||= call('/api/health').then((r) => r?.features || {}));
+export const features = () => health().then((r) => r.features || {});
+export const vapidKey = () => health().then((r) => r.vapidPublic || null);
 
 export const createPlan = (plan) => call('/api/plans', { method: 'POST', body: plan });
 export const getPlan = (id) => call(`/api/plans/${encodeURIComponent(id)}`);
@@ -37,6 +39,7 @@ export const sensors = (lat, lon) => call(`/api/sensors?lat=${lat}&lon=${lon}`, 
 
 export const pushSubscribe = (sub) => call('/api/push', { method: 'POST', body: sub });
 export const pushUnsubscribe = (endpoint) => call('/api/push', { method: 'DELETE', body: { endpoint } });
+export const pushTest = (endpoint, title, body) => call('/api/push/test', { method: 'POST', body: { endpoint, title, body } });
 
 export const telegramLink = (payload) => call('/api/telegram/link', { method: 'POST', body: payload });
 

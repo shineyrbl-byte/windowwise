@@ -3,7 +3,7 @@
 // - Keeps the app working offline: pages load from the network first (so a
 //   new version shows up right away) and fall back to the cache; built files
 //   have unique names, so they are served from the cache once stored.
-const CACHE = 'windowwise-v3';
+const CACHE = 'windowwise-v4';
 const SHELL = ['./', 'index.html', 'manifest.webmanifest', 'icon.svg', 'icon-192.png'];
 
 self.addEventListener('install', (event) => {
@@ -54,6 +54,34 @@ self.addEventListener('fetch', (event) => {
     hashed
       ? caches.match(req).then((hit) => hit || fromNetwork())
       : fromNetwork().catch(() => caches.match(req)),
+  );
+});
+
+// Server push: the push itself is empty; fetch the message text from the API.
+const API = 'https://windowwise-api.f20240273.workers.dev';
+self.addEventListener('push', (event) => {
+  event.waitUntil(
+    (async () => {
+      let msg = { title: 'WindowWise', body: 'Time to check your window.' };
+      try {
+        const sub = await self.registration.pushManager.getSubscription();
+        const res = await fetch(`${API}/api/push/message`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ endpoint: sub?.endpoint }),
+        });
+        if (res.ok) msg = await res.json();
+      } catch {
+        /* show the generic message */
+      }
+      await self.registration.showNotification(msg.title, {
+        body: msg.body,
+        tag: 'windowwise-change',
+        renotify: true,
+        icon: 'icon-192.png',
+        badge: 'icon-192.png',
+      });
+    })(),
   );
 });
 

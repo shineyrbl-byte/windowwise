@@ -38,12 +38,14 @@ let calibration = null;
 let community = null; // median calibrated room near this place, from other users
 let livePlan = null; // the live plan being followed, as last fetched
 let apiFeatures = {};
+let station = null; // nearest ground air-quality station, if any
 let lastPlan = null;
 let refreshTimer = null;
 let statusKey = null; // so status messages can be re-translated
 
 const notifyChange = (change, name) => {
-  if (state.remind && notifySupport() === 'granted') {
+  // With server push on, the server sends reminders; don't double up.
+  if (state.remind && notifySupport() === 'granted' && !state.push) {
     showNotification(change, name, { title: t(change.open ? 'n_open' : 'n_close'), body: `${reasonText(change.hour)}.` });
   }
   if (state.webhook && validWebhook(state.webhook)) {
@@ -152,6 +154,7 @@ function initLanguage() {
     state.lang = await setLang(sel.value);
     sel.value = state.lang;
     save();
+    syncPush();
     applyLanguage();
   });
 }
@@ -292,8 +295,72 @@ function schedulePlanUpdate() {
   }, 1500);
 }
 
+// What the server needs to plan reminders for this device.
+function serverSettings() {
+  const s = settings();
+  const out = {};
+  for (const k of [...PLAN_KEYS, 'aqiLimit', 'closedMix', 'sunScale', 'openMix']) if (s[k] != null) out[k] = s[k];
+  return out;
+}
+
+// ---------- server push ----------
+const b64ToBytes = (b64) => Uint8Array.from(atob(b64.replace(/-/g, '+').replace(/_/g, '/')), (c) => c.charCodeAt(0));
+const pushSupported = () => 'serviceWorker' in navigator && 'PushManager' in window;
+
+async function currentPushSub() {
+  if (!pushSupported()) return null;
+  const reg = await navigator.serviceWorker.ready;
+  return reg.pushManager.getSubscription();
+}
+
+async function enablePush() {
+  try {
+    const key = await api.vapidKey();
+    if (!key || !pushSupported() || !state.place) return false;
+    const reg = await navigator.serviceWorker.ready;
+    const sub = (await reg.pushManager.getSubscription()) || (await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: b64ToBytes(key) }));
+    const ok = await api.pushSubscribe({ subscription: sub.toJSON(), place: state.place, settings: serverSettings(), lang: getLang() });
+    state.push = !!ok;
+  } catch {
+    state.push = false;
+  }
+  save();
+  return state.push;
+}
+
+async function disablePush() {
+  try {
+    const sub = await currentPushSub();
+    if (sub) {
+      api.pushUnsubscribe(sub.endpoint);
+      await sub.unsubscribe();
+    }
+  } catch {
+    /* ignore */
+  }
+  state.push = false;
+  save();
+}
+
+// Keep the server's copy of place/settings/language up to date.
+let pushTimer = null;
+function syncPush() {
+  if (!state.push) return;
+  clearTimeout(pushTimer);
+  pushTimer = setTimeout(async () => {
+    const sub = await currentPushSub().catch(() => null);
+    if (!sub) {
+      state.push = false;
+      save();
+      return rerender();
+    }
+    api.pushSubscribe({ subscription: sub.toJSON(), place: state.place, settings: serverSettings(), lang: getLang() });
+  }, 1500);
+}
+
 function settingsChanged() {
   schedulePlanUpdate();
+  syncPush();
   if (isSaved(state.place)) {
     state.placeSettings = { ...(state.placeSettings || {}), [placeKey(state.place)]: { ...state.settings, sensitive: state.sensitive } };
   }
@@ -481,6 +548,9 @@ async function choose(place, quiet = false) {
     lastWeek = week;
     lastOffset = utcOffset;
     lastSeries = series;
+    if (switched) station = null;
+    loadStation(place);
+    syncPush();
     updateCalibration();
     if (switched || !community) {
       community = null;
@@ -546,8 +616,21 @@ window.addEventListener('appinstalled', () => {
   $('install').hidden = true;
 });
 
+// Live reading from the nearest ground station (OpenAQ, incl. CPCB).
+function loadStation(place) {
+  if (!apiFeatures.sensors || !place) return;
+  api.sensors(place.lat, place.lon).then((r) => {
+    if (state.place && placeKey(state.place) !== placeKey(place)) return;
+    station = r?.station || null;
+    rerender();
+  });
+}
+const stationFresh = () => station && station.aqi != null && station.at && Date.now() - Date.parse(station.at) < 2 * 3600e3;
+
 // ---------- rendering ----------
 function render(hours) {
+  // A fresh ground-station reading replaces the forecast for the current hour.
+  if (stationFresh()) hours = [{ ...hours[0], aqi: station.aqi, pm25: station.pm25 }, ...hours.slice(1)];
   const s = settings();
   const plan = makePlan(hours, s);
   lastPlan = plan;
@@ -686,7 +769,19 @@ function render(hours) {
         <div><dt>${t('rain')}</dt><dd>${now.rainProb ?? '–'}%</dd></div>
         <div><dt>${t('air')}</dt><dd><span class="pill ${band.cls}">${now.aqi ?? '–'} · ${band.label}</span></dd></div>
         ${pollenTile(now)}
+        ${stationFresh() ? `<div><dt>${t('sensor_tile')}</dt><dd>PM2.5 ${station.pm25}</dd></div>` : ''}
       </dl>
+      ${
+        stationFresh()
+          ? `<p class="small station">${t('sensor_line', {
+              name: esc(`${station.name}${station.provider ? ` (${station.provider})` : ''}`),
+              km: station.km,
+              pm: station.pm25,
+              aqi: station.aqi,
+              ago: ago(Date.parse(station.at)),
+            })} ${t('sensor_used')}</p>`
+          : ''
+      }
     </section>
 
     ${tonightCard}
@@ -768,15 +863,18 @@ function remindHtml(next, first) {
     body = `<p>${t('remind_denied')}</p>`;
   } else if (state.remind && support === 'granted') {
     const nextLine = next ? t(next.open ? 'remind_next_open' : 'remind_next_close', { when: strong(when(next.time, first)) }) : t('remind_none');
-    body = `<p>${t('remind_on')} ${nextLine}</p>
+    body = `<p>${t(state.push ? 'push_on' : 'remind_on')} ${nextLine}</p>
       <div class="row"><button type="button" class="ghost" data-act="remind-test">${t('remind_test')}</button>
       <button type="button" class="ghost" data-act="remind-off">${t('remind_off')}</button></div>
-      <p class="small">${t('remind_note')}</p>`;
+      ${state.push ? '' : `<p class="small">${t('remind_note')}</p>`}`;
   } else {
     body = `<p>${t('remind_pitch')}</p>
       <div class="row"><button type="button" data-act="remind-on">${t('remind_turn_on')}</button></div>`;
   }
-  return `<section class="card remind" aria-labelledby="remind-h"><h3 id="remind-h">${t('remind_title')}</h3>${body}</section>`;
+  const tg = apiFeatures.telegram
+    ? `<div class="row tg"><button type="button" class="ghost" data-act="tg">${t('tg_button')}</button></div><p class="small">${t('tg_help')}</p>`
+    : '';
+  return `<section class="card remind" aria-labelledby="remind-h"><h3 id="remind-h">${t('remind_title')}</h3>${body}${tg}</section>`;
 }
 
 async function copyLiveLink() {
@@ -801,8 +899,22 @@ $('out').addEventListener('click', async (e) => {
     const perm = await Notification.requestPermission();
     state.remind = perm === 'granted';
     if (!state.remind) status('remind_refused', {}, true);
+    else if (apiFeatures.push) await enablePush();
   } else if (act === 'remind-off') {
     state.remind = false;
+    if (state.push) await disablePush();
+  } else if (act === 'tg') {
+    // Open the window during the click (popup blockers allow that), then point it at Telegram.
+    const w = window.open('', '_blank');
+    const r = await api.telegramLink({ place: state.place, settings: serverSettings(), lang: getLang() });
+    if (!r) {
+      w?.close();
+      return status('tg_err', {}, true);
+    }
+    const url = `https://t.me/${encodeURIComponent(r.bot)}?start=${encodeURIComponent(r.code)}`;
+    if (w) w.location.href = url;
+    else location.href = url;
+    return;
   } else if (act === 'speak') {
     const card = document.querySelector('.now');
     const text = ['.verdict', '.why', '.next'].map((sel) => card.querySelector(sel)?.textContent.trim()).join(' ');
@@ -853,6 +965,11 @@ $('out').addEventListener('click', async (e) => {
       if (err?.name !== 'AbortError') status('copy_this', { url });
     }
     return;
+  } else if (act === 'remind-test' && state.push) {
+    const now = lastPlan[0];
+    const sub = await currentPushSub().catch(() => null);
+    if (sub) api.pushTest(sub.endpoint, t(now.open ? 'n_open' : 'n_close'), t('n_test', { why: reasonText(now) }));
+    return;
   } else if (act === 'remind-test') {
     const now = lastPlan[0];
     showNotification(now, placeName(state.place), {
@@ -878,6 +995,7 @@ async function start() {
   startRefresh();
   api.features().then((f) => {
     apiFeatures = f;
+    loadStation(state.place);
     rerender();
   });
   if (state.place || state.follow) {

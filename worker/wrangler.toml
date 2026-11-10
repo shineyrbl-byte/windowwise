@@ -14,4 +14,6 @@ database_id = "396e9405-63e7-4a41-92d1-dbf27c8ef6dd"
 crons = ["*/10 * * * *"]
 
 [vars]
+# Public half of the web push (VAPID) key pair; the private half is a secret.
+VAPID_PUBLIC = "BNgqu6UpUlYrh4oGilvAuul1X07RHSPZXm-I71c6qb6r0a9mcB_MiPVneF_4ReA87_f8afcqwHzTb7yROitP8A8"
 ALLOWED_ORIGINS = "https://shineyrbl-byte.github.io,http://localhost:5179,http://localhost:5173,http://localhost:4173"

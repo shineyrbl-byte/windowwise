@@ -281,3 +281,6 @@ input[type='url'] { font: inherit; color: var(--ink); background: var(--bg); bor
 .live-help { margin: 12px 0 8px; }
 .share-room { display: flex; gap: 10px; align-items: flex-start; margin-top: 12px; font-size: 0.92rem; }
 .share-room input { width: 20px; height: 20px; flex: none; accent-color: var(--accent); }
+
+.station { margin: 12px 0 0; }
+.remind .tg { margin-top: 12px; }
