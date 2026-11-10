@@ -1,7 +1,7 @@
 import './style.css';
 import { searchPlaces, fetchHours } from './data.js';
 import { DEFAULT_SETTINGS, FAN_FEELS_COOLER, pollenRisk, makePlan, toBlocks, summarize, daySummaries, hourOf, round } from './engine.js';
-import { renderChart } from './chart.js';
+import { renderChart, renderLog } from './chart.js';
 import { toQuery, fromQuery } from './share.js';
 import { calibrate, describeKeys } from './calibrate.js';
 import { createScheduler, notifySupport, showNotification } from './notify.js';
@@ -176,6 +176,10 @@ function updateCalibrationText() {
   const readings = placeReadings();
   const pairs = calibration ? (calibration.closedPairs || 0) + (calibration.openPairs || 0) : 0;
   const desc = calibration ? t('room_is', { parts: describeKeys(calibration).map((k) => t(k)).join(', ') }) : '';
+  $('calib-log').innerHTML = readings.length
+    ? renderLog(readings, lastSeries, t('log_aria')) +
+      `<p class="legend"><span class="line plan"></span> ${t('log_room')} <span class="line out"></span> ${t('line_out')} · ● ${t('calib_closed')} ○ ${t('calib_open')}</p>`
+    : '';
   $('calib-status').textContent = !readings.length
     ? t('calib_none')
     : calibration
@@ -196,6 +200,29 @@ $('calib-form').addEventListener('submit', (e) => {
   updateCalibration();
   rerender();
 });
+
+// Bluetooth thermometers that use the standard Environmental Sensing service
+// (0x181A) expose temperature as a signed 16-bit value in hundredths of a °C.
+if (navigator.bluetooth) {
+  $('bt-row').hidden = false;
+  $('bt-read').addEventListener('click', async () => {
+    let server;
+    try {
+      const device = await navigator.bluetooth.requestDevice({ filters: [{ services: ['environmental_sensing'] }] });
+      server = await device.gatt.connect();
+      const service = await server.getPrimaryService('environmental_sensing');
+      const ch = await service.getCharacteristic('temperature');
+      const value = await ch.readValue();
+      const temp = Math.round(value.getInt16(0, true)) / 100;
+      $('calibTemp').value = temp.toFixed(1);
+      status('bt_ok', { t: temp.toFixed(1), name: device.name || 'Bluetooth' });
+    } catch (err) {
+      if (err?.name !== 'NotFoundError') status('bt_err', {}, true);
+    } finally {
+      server?.disconnect();
+    }
+  });
+}
 
 $('calib-reset').addEventListener('click', () => {
   const p = state.place;

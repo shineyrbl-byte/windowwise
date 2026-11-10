@@ -176,6 +176,12 @@ const en = {
   r_dry: 'Drier air outside ({h}%): good for drying the room',
   save_place: 'Save this place',
   unsave: 'Remove {place}',
+  log_aria: 'Your room readings and the outdoor temperature',
+  log_room: 'Your room',
+  bt_read: '📶 Read from a Bluetooth thermometer',
+  bt_help: 'For thermometers that use the standard Bluetooth Environmental Sensing service, in Chrome or Edge (not iPhone).',
+  bt_ok: 'Read {t}°C from {name}. Choose the window state and log it.',
+  bt_err: "Couldn't read the thermometer. Check it is on, nearby, and supports Bluetooth Environmental Sensing.",
 };
 
 const hi = {
@@ -351,6 +357,12 @@ const hi = {
   r_dry: 'बाहर की हवा सूखी है ({h}%): कमरा सुखाने का अच्छा समय',
   save_place: 'यह जगह सेव करें',
   unsave: '{place} हटाएँ',
+  log_aria: 'आपके कमरे की रीडिंग और बाहर का तापमान',
+  log_room: 'आपका कमरा',
+  bt_read: '📶 ब्लूटूथ थर्मामीटर से पढ़ें',
+  bt_help: 'उन थर्मामीटर के लिए जो मानक ब्लूटूथ Environmental Sensing सेवा इस्तेमाल करते हैं, Chrome या Edge में (iPhone पर नहीं)।',
+  bt_ok: '{name} से {t}°C पढ़ा गया। खिड़की की स्थिति चुनें और दर्ज करें।',
+  bt_err: 'थर्मामीटर नहीं पढ़ा जा सका। जाँचें कि वह चालू है, पास है और ब्लूटूथ Environmental Sensing सपोर्ट करता है।',
 };
 
 const DICTS = { en, hi };

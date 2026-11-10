@@ -244,3 +244,10 @@ input[type='text'] { font: inherit; color: var(--ink); background: var(--bg); bo
 .chip button { background: transparent; color: var(--ink); border: 0; border-radius: 0; padding: 6px 12px; font-weight: 600; }
 .chip .x { padding: 6px 10px; color: var(--muted); border-left: 1px solid var(--line); }
 .small-btn { padding: 6px 12px; border-radius: 99px; font-size: 0.9rem; }
+
+/* room log + bluetooth */
+.chart.log { margin-top: 12px; }
+.chart .dot { fill: var(--accent); stroke: var(--card); stroke-width: 2; }
+.chart .dot.hollow { fill: var(--card); stroke: var(--accent); stroke-width: 3; }
+.bt-row { display: grid; gap: 4px; margin-top: 12px; }
+.bt-row .small { margin: 0; }

@@ -45,3 +45,33 @@ export function renderChart(plan, ariaLabel = `Room temperature over the next ${
     <polyline class="l plan" points="${line('indoorPlan')}"/>
   </svg>`;
 }
+
+// Small chart of the user's thermometer readings against outdoor temperature.
+// Filled dots: window mostly closed; hollow dots: mostly open.
+export function renderLog(readings, series, ariaLabel) {
+  if (!readings.length) return '';
+  const W = 720;
+  const H = 180;
+  const pad = { l: 36, r: 12, t: 10, b: 22 };
+  const from = readings[0].at - 3600e3;
+  const to = Math.max(readings[readings.length - 1].at + 3600e3, from + 6 * 3600e3);
+  const outside = series.filter((s) => s.at >= from && s.at <= to);
+  const vals = [...readings.map((r) => r.temp), ...outside.map((s) => s.temp)];
+  const lo = Math.floor(Math.min(...vals)) - 1;
+  const hi = Math.ceil(Math.max(...vals)) + 1;
+  const x = (at) => pad.l + ((at - from) / (to - from)) * (W - pad.l - pad.r);
+  const y = (v) => pad.t + (1 - (v - lo) / (hi - lo)) * (H - pad.t - pad.b);
+  const fmt = (at) => new Date(at).toLocaleString([], { weekday: 'short', hour: '2-digit', minute: '2-digit' });
+  return `<svg class="chart log" viewBox="0 0 ${W} ${H}" role="img" aria-label="${ariaLabel.replace(/"/g, '&quot;')}">
+    ${[lo, Math.round((lo + hi) / 2), hi]
+      .map((v) => `<line class="grid" x1="${pad.l}" x2="${W - pad.r}" y1="${y(v)}" y2="${y(v)}"/><text class="tick" x="${pad.l - 6}" y="${y(v) + 4}" text-anchor="end">${v}°</text>`)
+      .join('')}
+    <text class="tick" x="${pad.l}" y="${H - 6}">${fmt(from)}</text>
+    <text class="tick" x="${W - pad.r}" y="${H - 6}" text-anchor="end">${fmt(to)}</text>
+    ${outside.length > 1 ? `<polyline class="l out" points="${outside.map((s) => `${x(s.at).toFixed(1)},${y(s.temp).toFixed(1)}`).join(' ')}"/>` : ''}
+    <polyline class="l plan" points="${readings.map((r) => `${x(r.at).toFixed(1)},${y(r.temp).toFixed(1)}`).join(' ')}"/>
+    ${readings
+      .map((r) => `<circle class="dot ${r.open ? 'hollow' : ''}" cx="${x(r.at).toFixed(1)}" cy="${y(r.temp).toFixed(1)}" r="6"><title>${fmt(r.at)}: ${r.temp}°C</title></circle>`)
+      .join('')}
+  </svg>`;
+}

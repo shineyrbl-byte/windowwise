@@ -111,7 +111,12 @@
           <div class="row"><button type="submit" data-i18n="calib_log">Log reading</button>
           <button type="button" class="ghost" id="calib-reset" data-i18n="reset">Reset</button></div>
         </form>
+        <div class="row bt-row" id="bt-row" hidden>
+          <button type="button" class="ghost" id="bt-read" data-i18n="bt_read">📶 Read from a Bluetooth thermometer</button>
+          <p class="small" data-i18n="bt_help"></p>
+        </div>
         <p id="calib-status" class="small" aria-live="polite"></p>
+        <div id="calib-log"></div>
       </details>
 
       <div id="status" class="status" role="status" aria-live="polite"></div>
