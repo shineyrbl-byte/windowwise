@@ -44,8 +44,10 @@ let refreshTimer = null;
 let statusKey = null; // so status messages can be re-translated
 
 const notifyChange = (change, name) => {
-  // With server push on, the server sends reminders; don't double up.
-  if (state.remind && notifySupport() === 'granted' && !state.push) {
+  // Shown even when server push is on: both use the same notification tag,
+  // so if both arrive you see one notification, and if push is blocked on
+  // this network the in-app reminder still works while WindowWise is open.
+  if (state.remind && notifySupport() === 'granted') {
     showNotification(change, name, { title: t(change.open ? 'n_open' : 'n_close'), body: `${reasonText(change.hour)}.` });
   }
   if (state.webhook && validWebhook(state.webhook)) {

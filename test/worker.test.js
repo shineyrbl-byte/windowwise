@@ -44,7 +44,7 @@ import { pm25ToAqi } from '../src/engine.js';
 import { allowedEndpoint, vapidJwt } from '../worker/push.js';
 import { findDue } from '../worker/reminders.js';
 import { parseCommand } from '../worker/telegram.js';
-import { pickStation } from '../worker/sensors.js';
+import { candidateStations, freshReading } from '../worker/sensors.js';
 import { toEpoch } from '../src/notify.js';
 
 describe('server features', () => {
@@ -94,18 +94,25 @@ describe('server features', () => {
     expect(parseCommand('hello')).toEqual({ cmd: '', arg: '' });
   });
 
-  it('picks the nearest recent PM2.5 station', () => {
+  it('lists nearby recent PM2.5 stations, closest first', () => {
     const now = Date.UTC(2026, 10, 10, 12);
     const loc = (id, lat, lon, hoursAgo, pm = true) => ({
       id,
       name: `S${id}`,
       coordinates: { latitude: lat, longitude: lon },
       datetimeLast: { utc: new Date(now - hoursAgo * 3600e3).toISOString() },
-      sensors: [{ id: id * 10, parameter: { name: pm ? 'pm25' : 'o3' } }],
+      sensors: [{ id: id * 10, parameter: { name: pm ? 'pm25' : 'o3' } }, { id: id * 10 + 1, parameter: { name: 'pm25' } }],
     });
-    const here = { lat: 15.4, lon: 73.8 };
-    const pick = pickStation([loc(1, 15.5, 73.8, 1), loc(2, 15.41, 73.81, 5), loc(3, 15.42, 73.8, 0.5, false), loc(4, 15.45, 73.8, 0.5)], here, now);
-    expect(pick.id).toBe(4); // 2 is stale, 3 has no PM2.5
-    expect(pick.sensorId).toBe(40);
+    const list = candidateStations([loc(1, 15.5, 73.8, 1), loc(2, 15.41, 73.81, 5), loc(3, 15.42, 73.8, 0.5, false), loc(4, 15.45, 73.8, 0.5)], { lat: 15.4, lon: 73.8 }, now);
+    expect(list.map((s) => s.id)).toEqual([3, 4, 1]); // 2 is stale; 3 still has one PM2.5 sensor
+    expect(list[1].sensorIds).toEqual([40, 41]);
   });
+
+  it('uses the newest fresh reading and ignores retired sensors', () => {
+    const now = Date.UTC(2026, 10, 10, 12);
+    const r = (sensorsId, value, hoursAgo) => ({ sensorsId, value, datetime: { utc: new Date(now - hoursAgo * 3600e3).toISOString() } });
+    expect(freshReading([r(40, 201, 70000), r(41, 55, 1), r(99, 10, 0)], [40, 41], now).value).toBe(55);
+    expect(freshReading([r(40, 201, 70000)], [40, 41], now)).toBeNull();
+  });
+
 });

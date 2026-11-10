@@ -20,19 +20,31 @@ const km = (a, b) => {
   return 2 * R * Math.asin(Math.sqrt(x));
 };
 
-// Pick the closest location that has a PM2.5 sensor and reported recently.
-export function pickStation(locations, here, now = Date.now()) {
+// Nearby locations that have PM2.5 sensors and reported recently, closest first.
+// A location can have several PM2.5 sensors (old and new), so keep all their ids.
+export function candidateStations(locations, here, now = Date.now()) {
   return locations
     .map((l) => {
-      const sensor = (l.sensors || []).find((s) => s.parameter?.name === 'pm25');
+      const sensorIds = (l.sensors || []).filter((s) => s.parameter?.name === 'pm25').map((s) => s.id);
       const last = Date.parse(l.datetimeLast?.utc || '');
       const pos = { lat: l.coordinates?.latitude, lon: l.coordinates?.longitude };
-      return sensor && Number.isFinite(last) && now - last < MAX_AGE && pos.lat != null
-        ? { id: l.id, sensorId: sensor.id, name: l.name, provider: l.provider?.name || '', km: km(here, pos) }
+      return sensorIds.length && Number.isFinite(last) && now - last < MAX_AGE && pos.lat != null
+        ? { id: l.id, sensorIds, name: l.name, provider: l.provider?.name || '', km: km(here, pos) }
         : null;
     })
     .filter(Boolean)
-    .sort((a, b) => a.km - b.km)[0] || null;
+    .sort((a, b) => a.km - b.km);
+}
+
+// The newest PM2.5 reading for a station, if it is recent enough.
+export function freshReading(results, sensorIds, now = Date.now()) {
+  return (
+    results
+      .filter((r) => sensorIds.includes(r.sensorsId) && Number.isFinite(r.value) && r.value >= 0)
+      .map((r) => ({ ...r, t: Date.parse(r.datetime?.utc || '') }))
+      .filter((r) => Number.isFinite(r.t) && now - r.t < MAX_AGE)
+      .sort((a, b) => b.t - a.t)[0] || null
+  );
 }
 
 export async function nearestStation(url, env) {
@@ -45,23 +57,23 @@ export async function nearestStation(url, env) {
   if (cached) return json(cached);
 
   const locs = await openaq(env, `/locations?coordinates=${lat},${lon}&radius=25000&limit=20&parameters_id=2`);
-  const station = pickStation(locs.results || [], { lat, lon });
   let out = { station: null };
-  if (station) {
-    const latest = await openaq(env, `/locations/${station.id}/latest`);
-    const reading = (latest.results || []).find((r) => r.sensorsId === station.sensorId);
-    if (reading && Number.isFinite(reading.value) && reading.value >= 0) {
-      out = {
-        station: {
-          name: station.name,
-          provider: station.provider,
-          km: Math.round(station.km * 10) / 10,
-          pm25: Math.round(reading.value * 10) / 10,
-          aqi: pm25ToAqi(reading.value),
-          at: reading.datetime?.utc || null,
-        },
-      };
-    }
+  // Try up to three nearest stations until one has a fresh reading.
+  for (const st of candidateStations(locs.results || [], { lat, lon }).slice(0, 3)) {
+    const latest = await openaq(env, `/locations/${st.id}/latest`);
+    const reading = freshReading(latest.results || [], st.sensorIds);
+    if (!reading) continue;
+    out = {
+      station: {
+        name: st.name,
+        provider: st.provider,
+        km: Math.round(st.km * 10) / 10,
+        pm25: Math.round(reading.value * 10) / 10,
+        aqi: pm25ToAqi(reading.value),
+        at: reading.datetime.utc,
+      },
+    };
+    break;
   }
   await cacheSet(env, key, out, 20 * 60);
   return json(out);
