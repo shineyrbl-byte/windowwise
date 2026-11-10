@@ -1,7 +1,7 @@
 // Interface text in English and Hindi. Use t('key', { name: value }).
-// To add a language, copy the `en` block, translate it, and add it to LANGS.
+// To add a language, copy src/locales/hi.js, translate it, and add it to LANGS and LOADERS.
 
-export const LANGS = { en: 'English', hi: 'हिन्दी' };
+export const LANGS = { en: 'English', hi: 'हिन्दी', mr: 'मराठी', bn: 'বাংলা', ta: 'தமிழ்', te: 'తెలుగు', kn: 'ಕನ್ನಡ' };
 
 const en = {
   tagline: 'Know when to open your windows: cool your room for free, keep bad air out.',
@@ -203,219 +203,49 @@ const en = {
   bt_err: "Couldn't read the thermometer. Check it is on, nearby, and supports Bluetooth Environmental Sensing.",
 };
 
-const hi = {
-  tagline: 'जानिए खिड़की कब खोलें: कमरा मुफ़्त में ठंडा रखें, गंदी हवा बाहर रखें।',
-  skip: 'मुख्य सामग्री पर जाएँ',
-  language: 'भाषा',
-  choose_place: 'जगह चुनें',
-  city_label: 'शहर या कस्बा',
-  search_ph: 'अपना शहर या कस्बा खोजें',
-  search: 'खोजें',
-  locate: 'मेरी लोकेशन इस्तेमाल करें',
-  your_location: 'आपकी लोकेशन',
-  settings: 'आपका कमरा और पसंद',
-  start_indoor: 'अभी कमरे का तापमान (°C, वैकल्पिक)',
-  estimate: 'अनुमान',
-  comfort_max: 'कमरे को इससे नीचे रखें (°C)',
-  comfort_min: 'इससे नीचे बहुत ठंड (°C)',
-  sun_q: 'आपकी खिड़की पर सीधी धूप कब आती है?',
-  sun_unsure: 'पता नहीं',
-  sun_morning: 'सुबह (पूर्व की ओर)',
-  sun_afternoon: 'दोपहर (पश्चिम की ओर)',
-  sun_allday: 'लगभग पूरे दिन',
-  sun_shade: 'बहुत कम (छाया में)',
-  fan: 'मेरा पंखा चल रहा है',
-  sensitive: 'अस्थमा, एलर्जी या संवेदनशील फेफड़े (हवा की सख़्त सीमा, AQI 50)',
-  pollen_allergy: 'पराग (पोलन) एलर्जी (पराग ज़्यादा होने पर खिड़की बंद रखें; पराग डेटा केवल यूरोप के लिए है)',
-  calib_title: 'अपने कमरे के हिसाब से सेट करें (वैकल्पिक)',
-  calib_help:
-    'थर्मामीटर है? एक-दो दिन में कुछ बार कमरे का तापमान दर्ज करें, कम से कम एक घंटे के अंतर पर। WindowWise आपकी रीडिंग को उन घंटों के असली बाहरी मौसम से मिलाकर अपने मॉडल को आपके कमरे के हिसाब से ढाल लेता है।',
-  calib_temp: 'अभी कमरे का तापमान (°C)',
-  calib_since: 'पिछली रीडिंग के बाद से खिड़की',
-  calib_closed: 'ज़्यादातर बंद थी',
-  calib_open: 'ज़्यादातर खुली थी',
-  calib_log: 'रीडिंग दर्ज करें',
-  reset: 'रीसेट',
-  calib_none: 'अभी कोई रीडिंग नहीं।',
-  calib_done: '{n} रीडिंग से सेट किया गया ({p} उपयोगी अंतराल)। {desc}',
-  calib_more: '{n} रीडिंग दर्ज हुई। सेट करने के लिए 3 रीडिंग चाहिए, हर एक पिछली से 1–12 घंटे बाद।',
-  calib_need_place: 'पहले जगह चुनें, फिर रीडिंग दर्ज करें।',
-  room_is: 'आपका कमरा {parts}।',
-  leak_fast: 'बंद होने पर औसत से तेज़ गर्म होता है',
-  leak_slow: 'बंद होने पर तापमान अच्छी तरह बनाए रखता है',
-  leak_avg: 'बंद होने पर औसत रफ़्तार से गर्म होता है',
-  sun_high: 'धूप से काफ़ी गर्म होता है',
-  sun_low: 'धूप से कम गर्म होता है',
-  sun_avg: 'धूप से सामान्य रूप से गर्म होता है',
-  air_fast: 'जल्दी हवादार हो जाता है',
-  air_slow: 'धीरे हवादार होता है',
-  air_avg: 'सामान्य रफ़्तार से हवादार होता है',
-  footer:
-    'मौसम और हवा की गुणवत्ता का डेटा {link} से (CC BY 4.0)। कमरे का तापमान एक सरल अनुमान है, माप नहीं। इसे मार्गदर्शन की तरह इस्तेमाल करें, और ख़राब हवा वाले दिनों में स्थानीय स्वास्थ्य सलाह मानें।',
 
-  start_hint: 'आज का प्लान पाने के लिए अपना शहर खोजें या अपनी लोकेशन इस्तेमाल करें।',
-  searching: 'खोज रहे हैं…',
-  no_places: '“{q}” के लिए कोई जगह नहीं मिली।',
-  search_err: 'अभी खोज नहीं हो पाई। इंटरनेट जाँचें और फिर कोशिश करें।',
-  no_geo: 'आपका ब्राउज़र लोकेशन नहीं देता। कृपया शहर खोजें।',
-  finding: 'आपकी लोकेशन ढूँढ रहे हैं…',
-  geo_blocked: 'लोकेशन की अनुमति नहीं मिली। कृपया अपना शहर खोजें।',
-  loading: '{place} का मौसम लोड हो रहा है…',
-  no_air: 'यहाँ हवा की गुणवत्ता का डेटा नहीं है, इसलिए प्लान सिर्फ़ मौसम पर आधारित है।',
-  no_pollen: 'इस जगह के लिए पराग का पूर्वानुमान उपलब्ध नहीं है (यह केवल यूरोप के लिए है), इसलिए प्लान में पराग शामिल नहीं है।',
-  load_err: 'अभी मौसम का पूर्वानुमान उपलब्ध नहीं है। थोड़ी देर बाद फिर कोशिश करें।',
 
-  local_time: 'स्थानीय समय',
-  verdict_open: 'खिड़की खोलें',
-  verdict_closed: 'खिड़की बंद रखें',
-  next_open: '{when} बजे खोलें: {why}।',
-  next_close: '{when} बजे बंद करें: {why}।',
-  no_change: 'अगले {n} घंटों में कोई बदलाव ज़रूरी नहीं।',
-  tomorrow: 'कल',
-  outside: 'बाहर',
-  feels: 'महसूस',
-  humidity: 'नमी',
-  rain: 'बारिश की संभावना',
-  air: 'हवा की गुणवत्ता',
-  pollen: 'पराग',
-  benefit_saved:
-    'इस प्लान से आपका कमरा अधिकतम लगभग {plan} तक जाएगा, जबकि खिड़की बंद रखने पर {shut}। यानी बिना AC के {saved} ठंडा।',
-  benefit_none: 'आज खिड़की खोलने से कमरा ठंडा नहीं होगा, इसलिए बंद रखना ही सबसे अच्छा है।',
-  benefit_fresh: 'आपका कमरा अधिकतम लगभग {plan} रहेगा। खिड़की खोलने से कमरा गर्म हुए बिना ताज़ी हवा मिलेगी।',
-  fan_line: 'पंखा चलने पर सबसे गर्म समय में यह लगभग {t} जैसा महसूस होगा।',
-  bad_air_title: 'ख़राब हवा का दिन',
-  bad_air:
-    'अगले {total} घंटों में से {n} घंटे बाहर की हवा ख़राब है। फिर भी कमरे को थोड़ी ताज़ी हवा चाहिए, इसलिए 10–15 मिनट हवा देने का सबसे कम प्रदूषित समय है {when}{level}।',
-  next_hours: 'आपके अगले {n} घंटे',
-  hour_by_hour: 'घंटे-दर-घंटे',
-  open: 'खुली',
-  closed: 'बंद',
-  closed_air: 'बंद: ख़राब हवा',
-  closed_rain: 'बंद: बारिश',
-  closed_pollen: 'बंद: पराग',
-  chart_title: 'कमरे का तापमान: प्लान बनाम खिड़की बंद',
-  chart_aria: 'अगले {n} घंटों में कमरे का तापमान, प्लान के साथ और खिड़की बंद रखने पर।',
-  line_plan: 'प्लान के साथ कमरा',
-  line_shut: 'खिड़की बंद, कमरा',
-  line_out: 'बाहर',
-
-  aqi_na: 'डेटा नहीं',
-  aqi_good: 'अच्छी',
-  aqi_moderate: 'मध्यम',
-  aqi_sensitive: 'संवेदनशील लोगों के लिए हानिकारक',
-  aqi_unhealthy: 'हानिकारक',
-  aqi_very: 'बहुत हानिकारक',
-  level_high: 'ज़्यादा',
-  level_moderate: 'मध्यम',
-  level_low: 'कम',
-
-  r_rain: 'बारिश की {p}% संभावना',
-  r_air: 'बाहर की हवा ख़राब है (AQI {aqi})',
-  r_pollen: '{name} पराग ज़्यादा है ({v} कण/m³)',
-  r_cold: 'बाहर बहुत ठंड है ({t}°C)',
-  r_muggy: 'बाहर बहुत उमस है ({h}%)',
-  r_cool: 'बाहर ज़्यादा ठंडा है ({t}°C)',
-  r_heat: 'बाहर ज़्यादा गर्म है ({t}°C)',
-  r_fresh: 'बाहर मौसम सुहाना है: ताज़ी हवा का अच्छा समय',
-  pollen_grass: 'घास',
-  pollen_birch: 'बर्च',
-  pollen_alder: 'एल्डर',
-  pollen_mugwort: 'मगवर्ट',
-  pollen_olive: 'जैतून',
-  pollen_ragweed: 'रैगवीड',
-
-  remind_title: 'रिमाइंडर',
-  remind_unsupported: 'आपका ब्राउज़र नोटिफ़िकेशन नहीं देता। Chrome, Edge या Firefox आज़माएँ, या WindowWise को होम स्क्रीन पर इंस्टॉल करें।',
-  remind_denied: 'इस साइट के नोटिफ़िकेशन बंद हैं। रिमाइंडर पाने के लिए ब्राउज़र की साइट सेटिंग में इन्हें चालू करें।',
-  remind_on: '🔔 रिमाइंडर चालू हैं।',
-  remind_next_open: 'अगला रिमाइंडर: {when} बजे खोलें।',
-  remind_next_close: 'अगला रिमाइंडर: {when} बजे बंद करें।',
-  remind_none: 'अगले 24 घंटों में कोई बदलाव नहीं, इसलिए अभी कोई रिमाइंडर नहीं। प्लान हर 30 मिनट में अपडेट होता है।',
-  remind_test: 'टेस्ट भेजें',
-  remind_off: 'बंद करें',
-  remind_note: 'WindowWise को एक टैब में खुला रखें (पीछे चल सकता है) या ऐप की तरह इंस्टॉल करें। पूरी तरह बंद होने पर रिमाइंडर नहीं आ सकते।',
-  remind_pitch: 'खिड़की खोलने या बंद करने का समय होने पर नोटिफ़िकेशन पाएँ।',
-  remind_turn_on: '🔔 रिमाइंडर चालू करें',
-  remind_refused: 'नोटिफ़िकेशन की अनुमति नहीं मिली, इसलिए रिमाइंडर बंद रहेंगे।',
-  n_open: 'अब खिड़की खोलें',
-  n_close: 'खिड़की बंद करने का समय',
-  n_test: 'टेस्ट रिमाइंडर। अभी: {why}',
-
-  share_title: 'अपने हॉस्टल या फ़्लैट के साथ शेयर करें',
-  share_text:
-    'अपने फ़्लोर पर सबको एक ही प्लान भेजें, या नोटिसबोर्ड के लिए नोटिस प्रिंट करें। लिंक में यह जगह और आपके कमरे की सेटिंग होती है, आपकी थर्मामीटर रीडिंग कभी नहीं।',
-  share: 'प्लान शेयर करें',
-  print: 'नोटिस प्रिंट करें',
-  share_name: '{place} के लिए WindowWise प्लान',
-  copied: 'लिंक कॉपी हो गया। इसे अपने हॉस्टल ग्रुप चैट में पेस्ट करें।',
-  copy_this: 'यह लिंक कॉपी करें: {url}',
-  print_title: 'खिड़की प्लान: {place}',
-  print_sub: '{from} से {n} घंटों के लिए · WindowWise से {at} पर बनाया गया',
-  cross_vent: 'मेरे कमरे में दो तरफ़ खिड़कियाँ हैं (आर-पार हवा)',
-  curtains: 'धूप आने पर मैं पर्दे या ब्लाइंड बंद करता/करती हूँ',
-  damp: 'सीलन या मानसून मोड (बाहर की हवा सूखी हो तो कमरा सुखाएँ)',
-  energy_h: 'AC बचत का अनुमान',
-  tariff: 'बिजली की कीमत प्रति kWh',
-  currency: 'मुद्रा चिह्न',
-  ac_kw: 'AC की बिजली खपत (kWh प्रति घंटा)',
-  tonight_title: 'आज रात',
-  tonight_open: '{from} से {to} तक खिड़की खोलकर सोएँ।',
-  tonight_closed: 'आज रात खिड़की बंद रखें: {why}।',
-  cold_title: 'ठंडा दिन',
-  cold_tip: 'बाहर इतनी ठंड है कि खिड़की खुली नहीं रख सकते। {when} बजे ({t}°C), सबसे गर्म समय पर, 5–10 मिनट हवा दें।',
-  curtain_title: 'पर्दे',
-  curtain_tip: '{from} से {to} तक, जब खिड़की पर धूप हो, पर्दे या ब्लाइंड बंद रखें। इससे धूप की लगभग आधी गर्मी बाहर रहती है।',
-  energy_line: 'यानी लगभग {h} घंटे कम AC: {kwh} kWh, {money} और {co2} kg CO₂ की बचत।',
-  week_title: '7 दिन का अनुमान',
-  week_open: '{n} घंटे खुली',
-  week_night: 'रात {from}–{to}',
-  week_night_closed: 'रात: बंद',
-  today: 'आज',
-  r_wind: 'तेज़ हवा के झोंके ({g} km/h)',
-  r_damp: 'बाहर नमी है ({h}%): खोलने से सीलन बढ़ेगी',
-  r_dry: 'बाहर की हवा सूखी है ({h}%): कमरा सुखाने का अच्छा समय',
-  save_place: 'यह जगह सेव करें',
-  unsave: '{place} हटाएँ',
-  log_aria: 'आपके कमरे की रीडिंग और बाहर का तापमान',
-  log_room: 'आपका कमरा',
-  install: '📲 ऐप इंस्टॉल करें',
-  display_h: 'डिस्प्ले',
-  simple: 'सरल व्यू: सिर्फ़ जवाब',
-  contrast: 'हाई कंट्रास्ट',
-  large: 'बड़ा टेक्स्ट',
-  read_aloud: 'पढ़कर सुनाएँ',
-  embed_copy: 'एम्बेड कोड कॉपी करें',
-  embed_copied: 'एम्बेड कोड कॉपी हो गया। इसे अपने हॉस्टल या कॉलेज की वेबसाइट में पेस्ट करें।',
-  embed_open: 'पूरा प्लान खोलें',
-  hook_h: 'स्मार्ट होम (एडवांस्ड)',
-  hook_label: 'खिड़की खोलने या बंद करने के समय कॉल होने वाला वेबहुक URL',
-  hook_help: 'IFTTT, Home Assistant या ऐसे ऐप के लिए: पंखा या स्मार्ट खिड़की चालू करें। WindowWise खुला या इंस्टॉल होने पर इसी डिवाइस से कॉल होता है, जिसमें काम (खोलें/बंद करें), जगह और कारण होते हैं। URL सिर्फ़ इसी डिवाइस पर सेव रहता है।',
-  hook_test: 'टेस्ट भेजें',
-  hook_invalid: 'वेबहुक https:// पता होना चाहिए।',
-  hook_saved: 'वेबहुक सेव हो गया। हर खोलने/बंद करने के बदलाव पर यह कॉल होगा।',
-  hook_sent: 'टेस्ट भेजा गया। अपने स्मार्ट होम ऐप में देखें कि पहुँचा या नहीं।',
-  hook_failed: 'टेस्ट नहीं भेजा जा सका। पता और इंटरनेट जाँचें।',
-  embed_missing: 'इस विजेट को एक जगह चाहिए। WindowWise से एम्बेड कोड कॉपी करें।',
-  offline: 'आप ऑफ़लाइन हैं। {time} पर सेव किया गया पूर्वानुमान दिख रहा है।',
-  bt_read: '📶 ब्लूटूथ थर्मामीटर से पढ़ें',
-  bt_help: 'उन थर्मामीटर के लिए जो मानक ब्लूटूथ Environmental Sensing सेवा इस्तेमाल करते हैं, Chrome या Edge में (iPhone पर नहीं)।',
-  bt_ok: '{name} से {t}°C पढ़ा गया। खिड़की की स्थिति चुनें और दर्ज करें।',
-  bt_err: 'थर्मामीटर नहीं पढ़ा जा सका। जाँचें कि वह चालू है, पास है और ब्लूटूथ Environmental Sensing सपोर्ट करता है।',
+// Other languages load only when chosen, so the app stays small.
+const LOADERS = {
+  hi: () => import('./locales/hi.js'),
+  mr: () => import('./locales/mr.js'),
+  bn: () => import('./locales/bn.js'),
+  ta: () => import('./locales/ta.js'),
+  te: () => import('./locales/te.js'),
+  kn: () => import('./locales/kn.js'),
 };
-
-const DICTS = { en, hi };
+const DICTS = { en };
 let current = 'en';
 
-export function setLang(lang) {
-  current = DICTS[lang] ? lang : 'en';
+export async function loadLang(lang) {
+  if (!DICTS[lang] && LOADERS[lang]) {
+    try {
+      DICTS[lang] = (await LOADERS[lang]()).default;
+    } catch {
+      return false; // offline and not cached: stay on the current language
+    }
+  }
+  return !!DICTS[lang];
+}
+
+export async function setLang(lang) {
+  current = (await loadLang(lang)) ? lang : 'en';
   return current;
 }
 export const getLang = () => current;
 
 export function t(key, vars = {}) {
-  const str = DICTS[current][key] ?? en[key] ?? key;
+  const str = DICTS[current]?.[key] ?? en[key] ?? key;
   return str.replace(/\{(\w+)\}/g, (m, name) => (name in vars ? vars[name] : m));
 }
 
-// Every key must exist in every language.
-export const missingKeys = (lang) => Object.keys(en).filter((k) => !(k in DICTS[lang]));
+// Keys missing from a language, and keys whose {placeholders} don't match English.
+export async function checkLang(lang) {
+  await loadLang(lang);
+  const d = DICTS[lang];
+  const vars = (str) => (str.match(/\{\w+\}/g) || []).sort().join();
+  return {
+    missing: Object.keys(en).filter((k) => !(k in d)),
+    badVars: Object.keys(en).filter((k) => k in d && vars(en[k]) !== vars(d[k])),
+  };
+}

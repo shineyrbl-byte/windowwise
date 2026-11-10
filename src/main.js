@@ -22,7 +22,6 @@ if (shared) {
   state.sensitive = shared.sensitive;
   history.replaceState(null, '', location.pathname);
 }
-setLang(state.lang || (navigator.language || '').slice(0, 2));
 
 let lastHours = null;
 let lastWeek = [];
@@ -130,8 +129,9 @@ function initLanguage() {
     .map(([code, name]) => `<option value="${code}">${name}</option>`)
     .join('');
   sel.value = getLang();
-  sel.addEventListener('change', () => {
-    state.lang = setLang(sel.value);
+  sel.addEventListener('change', async () => {
+    state.lang = await setLang(sel.value);
+    sel.value = state.lang;
     save();
     applyLanguage();
   });
@@ -547,7 +547,7 @@ function render(hours) {
       : '';
 
   const legendExtra = plan.some((h) => h.reason === 'pollen') ? ` <span class="key pollen"></span> ${t('closed_pollen')}` : '';
-  const printedAt = new Date().toLocaleString(getLang() === 'hi' ? 'hi-IN' : [], { dateStyle: 'medium', timeStyle: 'short' });
+  const printedAt = new Date().toLocaleString(LOCALES[getLang()] || [], { dateStyle: 'medium', timeStyle: 'short' });
 
   $('out').innerHTML = `
     <header class="print-only print-head">
@@ -723,13 +723,17 @@ const windowOpenSvg = `<svg viewBox="0 0 48 48" width="44" height="44"><rect x="
 const windowShutSvg = `<svg viewBox="0 0 48 48" width="44" height="44"><rect x="6" y="5" width="36" height="38" rx="3" fill="currentColor" fill-opacity=".15" stroke="currentColor" stroke-width="3"/><path d="M24 5v38M6 24h36" stroke="currentColor" stroke-width="3"/></svg>`;
 
 // ---------- start ----------
-initLanguage();
-initSettings();
-applyLanguage();
-startRefresh();
-if (state.place) {
-  $('q').value = isMine(state.place) ? '' : state.place.name;
-  choose(state.place);
-} else {
-  status('start_hint');
+async function start() {
+  await setLang(state.lang || (navigator.language || '').slice(0, 2));
+  initLanguage();
+  initSettings();
+  applyLanguage();
+  startRefresh();
+  if (state.place) {
+    $('q').value = isMine(state.place) ? '' : state.place.name;
+    choose(state.place);
+  } else {
+    status('start_hint');
+  }
 }
+start();
