@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { decideHour, makePlan, toBlocks, summarize, bestAirHour } from '../src/engine.js';
+import { decideHour, makePlan, toBlocks, summarize, bestAirHour, sunGain, step, modelParams } from '../src/engine.js';
 
 const hour = (over) => ({
   time: '2026-11-09T02:00',
@@ -98,5 +98,29 @@ describe('bestAirHour', () => {
 
   it('returns null without air data', () => {
     expect(bestAirHour(makePlan([hour({ aqi: null })]))).toBeNull();
+  });
+});
+
+describe('window sun and fan', () => {
+  it('heats a morning-sun room in the morning and an afternoon-sun room later', () => {
+    expect(sunGain(9, 'morning')).toBeGreaterThan(sunGain(9, 'afternoon'));
+    expect(sunGain(15, 'afternoon')).toBeGreaterThan(sunGain(15, 'morning'));
+    expect(sunGain(2, 'allday')).toBe(0);
+  });
+
+  it('a shaded room warms less than an unsure one', () => {
+    const shade = summarize(makePlan(day, { startIndoor: 30, sun: 'shade' }));
+    const unsure = summarize(makePlan(day, { startIndoor: 30 }));
+    expect(shade.peakShut).toBeLessThan(unsure.peakShut);
+  });
+
+  it('a fan cools the room faster with the window open', () => {
+    const noFan = step(30, 22, true, 2, modelParams({ fan: false }));
+    const fan = step(30, 22, true, 2, modelParams({ fan: true }));
+    expect(fan).toBeLessThan(noFan);
+  });
+
+  it('uses calibrated values when present', () => {
+    expect(modelParams({ closedMix: 0.15, sunScale: 1.5 })).toMatchObject({ closedMix: 0.15, sunScale: 1.5 });
   });
 });

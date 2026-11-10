@@ -7,28 +7,57 @@ export const DEFAULT_SETTINGS = {
   aqiLimit: 100, // US AQI: above this, keep pollution out (use 50 if sensitive)
   rainLimit: 60, // % chance of rain that counts as "it will rain"
   startIndoor: null, // °C: current room temperature, if the user knows it
+  sun: 'unsure', // which part of the day the window gets direct sun (see SUN_PROFILES)
+  fan: false, // a fan running in the room
+  closedMix: null, // calibrated: how fast heat leaks into the closed room
+  sunScale: null, // calibrated: how strongly the sun heats this room
 };
 
 // Simple room model, tuned to feel plausible rather than to be exact:
 // an open window pulls the room strongly toward outdoor temperature,
 // a closed one leaks slowly, and the sun warms a closed room by day.
-const OPEN_MIX = 0.5;
-const CLOSED_MIX = 0.08;
-const SUN_GAIN = 0.35; // °C per daytime hour
+export const OPEN_MIX = 0.5;
+export const FAN_OPEN_MIX = 0.65; // a fan pulls outside air through faster
+export const CLOSED_MIX = 0.08;
+export const FAN_FEELS_COOLER = 2; // °C: a ceiling fan's breeze feels about this much cooler
+
+// °C of sun heating per hour, by when the window gets direct sun.
+// Described by time of day rather than compass direction so it works
+// in both hemispheres.
+export const SUN_PROFILES = {
+  morning: [[7, 12, 0.6], [12, 17, 0.2]],
+  afternoon: [[9, 13, 0.2], [13, 19, 0.6]],
+  allday: [[8, 17, 0.45]],
+  shade: [[9, 18, 0.15]],
+  unsure: [[9, 18, 0.35]],
+};
 
 // Times look like "2026-11-09T14:00" in the place's own timezone,
 // so read the hour from the string instead of the browser's clock.
 export const hourOf = (time) => Number(time.slice(11, 13));
-const isDaytime = (time) => {
-  const h = hourOf(time);
-  return h >= 9 && h < 18;
-};
+export function sunGain(hour, profile = 'unsure', scale = 1) {
+  const bands = SUN_PROFILES[profile] || SUN_PROFILES.unsure;
+  const band = bands.find(([from, to]) => hour >= from && hour < to);
+  return band ? band[2] * scale : 0;
+}
 
-const step = (indoor, outdoor, open, time) => {
-  const mix = open ? OPEN_MIX : CLOSED_MIX;
-  const sun = !open && isDaytime(time) ? SUN_GAIN : 0;
+// The room model's numbers for these settings.
+export function modelParams(settings = {}) {
+  const s = { ...DEFAULT_SETTINGS, ...settings };
+  return {
+    openMix: s.fan ? FAN_OPEN_MIX : OPEN_MIX,
+    closedMix: s.closedMix ?? CLOSED_MIX,
+    sunScale: s.sunScale ?? 1,
+    sun: s.sun,
+  };
+}
+
+// One hour of the room model. Exported so calibration can reuse it.
+export function step(indoor, outdoor, open, hour, p = modelParams()) {
+  const mix = open ? p.openMix : p.closedMix;
+  const sun = open ? 0 : sunGain(hour, p.sun, p.sunScale);
   return indoor + (outdoor - indoor) * mix + sun;
-};
+}
 
 // Decide one hour given the current indoor estimate.
 export function decideHour(hour, indoor, settings = DEFAULT_SETTINGS) {
@@ -61,6 +90,7 @@ export function decideHour(hour, indoor, settings = DEFAULT_SETTINGS) {
 export function makePlan(hours, settings = {}) {
   const s = { ...DEFAULT_SETTINGS, ...settings };
   if (!hours.length) return [];
+  const p = modelParams(s);
   const start = s.startIndoor ?? hours[0].temp + 3;
   let planned = start;
   let shut = start;
@@ -68,8 +98,8 @@ export function makePlan(hours, settings = {}) {
   return hours.map((hour) => {
     const decision = decideHour(hour, planned, s);
     const entry = { ...hour, ...decision, indoorPlan: planned, indoorShut: shut };
-    planned = step(planned, hour.temp, decision.open, hour.time);
-    shut = step(shut, hour.temp, false, hour.time);
+    planned = step(planned, hour.temp, decision.open, hourOf(hour.time), p);
+    shut = step(shut, hour.temp, false, hourOf(hour.time), p);
     return entry;
   });
 }

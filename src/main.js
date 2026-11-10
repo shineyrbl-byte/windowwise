@@ -1,6 +1,6 @@
 import './style.css';
 import { searchPlaces, fetchHours } from './data.js';
-import { DEFAULT_SETTINGS, makePlan, toBlocks, summarize, hourOf, round } from './engine.js';
+import { DEFAULT_SETTINGS, FAN_FEELS_COOLER, makePlan, toBlocks, summarize, hourOf, round } from './engine.js';
 import { renderChart } from './chart.js';
 import { createScheduler, notifySupport, showNotification } from './notify.js';
 
@@ -68,6 +68,18 @@ function initSettings() {
       if (lastHours) render(lastHours);
     });
   }
+  $('sun').value = state.settings.sun || 'unsure';
+  $('sun').addEventListener('change', (e) => {
+    state.settings.sun = e.target.value;
+    save();
+    if (lastHours) render(lastHours);
+  });
+  $('fan').checked = !!state.settings.fan;
+  $('fan').addEventListener('change', (e) => {
+    state.settings.fan = e.target.checked;
+    save();
+    if (lastHours) render(lastHours);
+  });
   $('sensitive').checked = state.sensitive;
   $('sensitive').addEventListener('change', (e) => {
     state.sensitive = e.target.checked;
@@ -149,6 +161,10 @@ function render(hours) {
         ? `Opening the window today wouldn't cool your room, so keeping it shut is the best option.`
         : `Your room stays around <strong>${sum.peakPlan}°C</strong> at its warmest. Opening the window adds fresh air without warming the room.`;
 
+  const fanLine = state.settings.fan
+    ? ` With your fan on, it should feel more like <strong>${round(sum.peakPlan - FAN_FEELS_COOLER)}°C</strong> at its warmest.`
+    : '';
+
   const airTip =
     sum.airHours >= 6 && sum.bestAir
       ? `<div class="card tip warn-tip">
@@ -176,7 +192,7 @@ function render(hours) {
       </dl>
     </section>
 
-    <section class="card benefit"><p>${benefit}</p></section>
+    <section class="card benefit"><p>${benefit}${fanLine}</p></section>
     ${remindHtml(nextReminder, first)}
     ${airTip}
 

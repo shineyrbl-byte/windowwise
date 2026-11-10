@@ -43,6 +43,19 @@
           <label>Too cold below (°C)
             <input id="comfortMin" type="number" step="0.5" min="0" max="30" />
           </label>
+          <label>When does your window get direct sun?
+            <select id="sun">
+              <option value="unsure">Not sure</option>
+              <option value="morning">Morning (faces east)</option>
+              <option value="afternoon">Afternoon (faces west)</option>
+              <option value="allday">Most of the day</option>
+              <option value="shade">Hardly ever (shaded)</option>
+            </select>
+          </label>
+          <label class="check">
+            <input id="fan" type="checkbox" />
+            I have a fan running
+          </label>
           <label class="check">
             <input id="sensitive" type="checkbox" />
             Asthma, allergies or sensitive lungs (stricter air limit, AQI 50)
