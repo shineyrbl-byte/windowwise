@@ -1,6 +1,6 @@
 import './style.css';
 import { searchPlaces, fetchHours } from './data.js';
-import { DEFAULT_SETTINGS, FAN_FEELS_COOLER, pollenRisk, makePlan, toBlocks, summarize, hourOf, round } from './engine.js';
+import { DEFAULT_SETTINGS, FAN_FEELS_COOLER, pollenRisk, makePlan, toBlocks, summarize, daySummaries, hourOf, round } from './engine.js';
 import { renderChart } from './chart.js';
 import { toQuery, fromQuery } from './share.js';
 import { calibrate, describeKeys } from './calibrate.js';
@@ -22,6 +22,7 @@ if (shared) {
 setLang(state.lang || (navigator.language || '').slice(0, 2));
 
 let lastHours = null;
+let lastWeek = [];
 let lastOffset = 0;
 let lastSeries = [];
 let calibration = null;
@@ -56,6 +57,10 @@ function save() {
 const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
 const lowerFirst = (s) => (getLang() === 'en' ? s.charAt(0).toLowerCase() + s.slice(1) : s);
 const clock = (time) => `${String(hourOf(time)).padStart(2, '0')}:00`;
+// The end of an hour block: a block ending at the 05:00 hour lasts until 06:00.
+const endClock = (time) => `${String((hourOf(time) + 1) % 24).padStart(2, '0')}:00`;
+const LOCALES = { en: 'en-IN', hi: 'hi-IN', mr: 'mr-IN', ta: 'ta-IN', te: 'te-IN', kn: 'kn-IN', bn: 'bn-IN' };
+const weekday = (date) => new Date(`${date}T12:00:00Z`).toLocaleDateString(LOCALES[getLang()] || 'en-IN', { weekday: 'short', day: 'numeric', timeZone: 'UTC' });
 const dayLabel = (time, first) => (time.slice(0, 10) === first.slice(0, 10) ? '' : ` ${t('tomorrow')}`);
 const when = (time, first) => `${clock(time)}${dayLabel(time, first)}`;
 const strong = (s) => `<strong>${s}</strong>`;
@@ -98,6 +103,12 @@ function reasonText(h) {
       return t('r_heat', { t: round(h.temp) });
     case 'fresh':
       return t('r_fresh');
+    case 'wind':
+      return t('r_wind', { g: Math.round(h.gust) });
+    case 'damp':
+      return t('r_damp', { h: h.humidity });
+    case 'dry':
+      return t('r_dry', { h: h.humidity });
     default:
       return h.text || '';
   }
@@ -195,9 +206,9 @@ $('calib-reset').addEventListener('click', () => {
 
 // ---------- settings form ----------
 function initSettings() {
-  for (const key of ['startIndoor', 'comfortMax', 'comfortMin']) {
+  for (const key of ['startIndoor', 'comfortMax', 'comfortMin', 'tariff', 'acKw']) {
     const input = $(key);
-    input.value = state.settings[key] ?? '';
+    input.value = state.settings[key] ?? (key === 'startIndoor' ? '' : DEFAULT_SETTINGS[key]);
     input.addEventListener('change', () => {
       const v = input.value === '' ? null : Number(input.value);
       state.settings[key] = v ?? (key === 'startIndoor' ? null : DEFAULT_SETTINGS[key]);
@@ -211,7 +222,13 @@ function initSettings() {
     save();
     rerender();
   });
-  for (const key of ['fan', 'pollenAllergy']) {
+  $('currency').value = state.settings.currency ?? DEFAULT_SETTINGS.currency;
+  $('currency').addEventListener('change', (e) => {
+    state.settings.currency = e.target.value.trim().slice(0, 4) || DEFAULT_SETTINGS.currency;
+    save();
+    rerender();
+  });
+  for (const key of ['fan', 'pollenAllergy', 'crossVent', 'curtains', 'damp']) {
     $(key).checked = !!state.settings[key];
     $(key).addEventListener('change', (e) => {
       state.settings[key] = e.target.checked;
@@ -267,8 +284,9 @@ async function choose(place, quiet = false) {
   save();
   if (!quiet) status('loading', { place: placeName(place) });
   try {
-    const { hours, hasAir, utcOffset, series } = await fetchHours(place.lat, place.lon);
+    const { hours, week, hasAir, utcOffset, series } = await fetchHours(place.lat, place.lon);
     lastHours = hours;
+    lastWeek = week;
     lastOffset = utcOffset;
     lastSeries = series;
     updateCalibration();
@@ -284,9 +302,11 @@ async function choose(place, quiet = false) {
 
 // ---------- rendering ----------
 function render(hours) {
-  const plan = makePlan(hours, settings());
+  const s = settings();
+  const plan = makePlan(hours, s);
   lastPlan = plan;
-  const sum = summarize(plan);
+  const sum = summarize(plan, s);
+  const days = lastWeek.length ? daySummaries(makePlan(lastWeek, s)).slice(0, 7) : [];
   const nextReminder =
     state.remind && notifySupport() === 'granted' ? scheduler.schedule(plan, lastOffset, placeName(state.place)) : (scheduler.clear(), null);
   const blocks = toBlocks(plan);
@@ -309,6 +329,56 @@ function render(hours) {
         : t('benefit_fresh', { plan: strong(`${sum.peakPlan}°C`) });
 
   const fanLine = state.settings.fan ? ` ${t('fan_line', { t: strong(`${round(sum.peakPlan - FAN_FEELS_COOLER)}°C`) })}` : '';
+  const en = sum.energy;
+  const energyLine =
+    en.hours > 0
+      ? ` ${t('energy_line', { h: strong(en.hours), kwh: en.kwh, money: strong(`${esc(en.currency)}${en.money}`), co2: en.co2 })}`
+      : '';
+
+  const tn = sum.tonight;
+  const tonightCard = tn
+    ? `<section class="card tonight" aria-labelledby="tonight-h">
+        <h3 id="tonight-h">🌙 ${t('tonight_title')}</h3>
+        <p>${
+          tn.best
+            ? t('tonight_open', { from: strong(clock(tn.best.start.time)), to: strong(endClock(tn.best.end.time)) })
+            : t('tonight_closed', { why: esc(lowerFirst(reasonText(tn.closedBecause || tn.start))) })
+        }</p>
+      </section>`
+    : '';
+
+  const coldTip =
+    sum.coldHours >= 6 && sum.openHours === 0 && sum.warmest
+      ? `<div class="card tip cold-tip"><h3>❄️ ${t('cold_title')}</h3><p>${t('cold_tip', { when: strong(when(sum.warmest.time, first)), t: round(sum.warmest.temp) })}</p></div>`
+      : '';
+
+  const ct = sum.curtains;
+  const curtainTip = ct
+    ? `<div class="card tip"><h3>☀️ ${t('curtain_title')}</h3><p>${t('curtain_tip', { from: strong(clock(ct.from.time)), to: strong(endClock(ct.to.time)) })}</p></div>`
+    : '';
+
+  const weekHtml = days.length
+    ? `<section class="card" aria-labelledby="week-h">
+        <h3 id="week-h">${t('week_title')}</h3>
+        <ul class="week">
+          ${days
+            .map((d, i) => {
+              const b = aqiBand(d.maxAqi);
+              const night = d.night?.best
+                ? t('week_night', { from: clock(d.night.best.start.time), to: endClock(d.night.best.end.time) })
+                : t('week_night_closed');
+              return `<li>
+                <span class="wd">${i === 0 ? t('today') : esc(weekday(d.date))}</span>
+                <span class="temps">${Math.round(d.min)}–${Math.round(d.max)}°C</span>
+                <span class="pill ${b.cls}">AQI ${d.maxAqi ?? '–'}</span>
+                <span class="wopen">${d.rainHours ? '🌧️ ' : ''}${d.windHours ? '💨 ' : ''}${t('week_open', { n: d.openHours })}</span>
+                <span class="wnight">🌙 ${night}</span>
+              </li>`;
+            })
+            .join('')}
+        </ul>
+      </section>`
+    : '';
 
   const ba = sum.bestAir;
   const airTip =
@@ -350,7 +420,8 @@ function render(hours) {
       </dl>
     </section>
 
-    <section class="card benefit"><p>${benefit}${fanLine}</p></section>
+    ${tonightCard}
+    <section class="card benefit"><p>${benefit}${fanLine}${energyLine}</p></section>
     ${remindHtml(nextReminder, first)}
     <section class="card share no-print" aria-labelledby="share-h">
       <h3 id="share-h">${t('share_title')}</h3>
@@ -361,6 +432,8 @@ function render(hours) {
       </div>
     </section>
     ${airTip}
+    ${coldTip}
+    ${curtainTip}
 
     <section class="card" aria-labelledby="plan-h">
       <h3 id="plan-h">${t('next_hours', { n: plan.length })}</h3>
@@ -399,6 +472,7 @@ function render(hours) {
         <span class="line out"></span> ${t('line_out')}
       </p>
     </section>
+    ${weekHtml}
   `;
 }
 

@@ -217,3 +217,22 @@ button.ghost { background: transparent; color: var(--accent); }
 /* language switch */
 .brand-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 .lang select { padding: 6px 10px; font-size: 0.9rem; }
+
+/* tonight, tips, week */
+.tonight p, .tip p { margin: 0; }
+.tonight { border-left: 4px solid var(--accent); }
+.cold-tip { background: var(--closed-soft); border-color: transparent; }
+.group-h { grid-column: 1 / -1; margin: 8px 0 0; font-weight: 700; color: var(--ink); }
+input[type='text'] { font: inherit; color: var(--ink); background: var(--bg); border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; }
+.week { list-style: none; margin: 8px 0 0; padding: 0; display: grid; gap: 6px; }
+.week li {
+  display: grid; grid-template-columns: 6.5rem 5.5rem 6rem 1fr 1fr; gap: 8px; align-items: center;
+  padding: 8px 10px; border-radius: 10px; background: var(--bg); font-size: 0.92rem;
+}
+.week .wd { font-weight: 700; }
+.week .temps { font-variant-numeric: tabular-nums; }
+.week .wnight { color: var(--muted); }
+@media (max-width: 600px) {
+  .week li { grid-template-columns: 1fr auto; }
+  .week .wopen, .week .wnight { grid-column: 1 / -1; }
+}

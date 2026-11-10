@@ -62,12 +62,34 @@
             <span data-i18n="fan">I have a fan running</span>
           </label>
           <label class="check">
+            <input id="crossVent" type="checkbox" />
+            <span data-i18n="cross_vent">My room has windows on two sides (cross-ventilation)</span>
+          </label>
+          <label class="check">
+            <input id="curtains" type="checkbox" />
+            <span data-i18n="curtains">I close curtains or blinds when the sun is on the window</span>
+          </label>
+          <label class="check">
+            <input id="damp" type="checkbox" />
+            <span data-i18n="damp">Damp or monsoon mode</span>
+          </label>
+          <label class="check">
             <input id="sensitive" type="checkbox" />
             <span data-i18n="sensitive">Asthma, allergies or sensitive lungs (stricter air limit, AQI 50)</span>
           </label>
           <label class="check">
             <input id="pollenAllergy" type="checkbox" />
             <span data-i18n="pollen_allergy">Pollen allergy (keep the window shut when pollen is high; pollen data covers Europe only)</span>
+          </label>
+          <p class="group-h" data-i18n="energy_h">AC savings estimate</p>
+          <label><span data-i18n="tariff">Electricity price per kWh</span>
+            <input id="tariff" type="number" step="0.5" min="0" max="1000" />
+          </label>
+          <label><span data-i18n="currency">Currency symbol</span>
+            <input id="currency" type="text" maxlength="4" />
+          </label>
+          <label><span data-i18n="ac_kw">AC power use (kWh per hour)</span>
+            <input id="acKw" type="number" step="0.1" min="0.2" max="5" />
           </label>
         </div>
       </details>
