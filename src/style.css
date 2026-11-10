@@ -198,3 +198,18 @@ button.ghost { background: transparent; color: var(--accent); }
 .calib summary { cursor: pointer; font-weight: 600; }
 .calib .small { margin: 10px 0 0; }
 .fields .row { display: flex; gap: 8px; align-items: end; flex-wrap: wrap; }
+
+/* share + print */
+.share p { margin: 0 0 10px; }
+.share .row { display: flex; flex-wrap: wrap; gap: 8px; }
+.print-only { display: none; }
+@media print {
+  :root { --bg: #fff; --card: #fff; --ink: #000; --muted: #333; --line: #bbb; --shadow: none; }
+  body { background: #fff; }
+  .top, .place, .settings, .calib, .status, .remind, .share, .foot, .skip, .no-print, .tip, .benefit { display: none !important; }
+  .print-only { display: block; }
+  .print-head h1 { font-size: 28pt; margin: 0 0 4pt; }
+  .card { border: 1px solid #999; box-shadow: none; break-inside: avoid; }
+  .blocks li { font-size: 14pt; }
+  .strip li.o { background: #0a7a52 !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+}

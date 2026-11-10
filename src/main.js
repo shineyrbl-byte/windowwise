@@ -2,6 +2,7 @@ import './style.css';
 import { searchPlaces, fetchHours } from './data.js';
 import { DEFAULT_SETTINGS, FAN_FEELS_COOLER, pollenRisk, makePlan, toBlocks, summarize, hourOf, round } from './engine.js';
 import { renderChart } from './chart.js';
+import { toQuery, fromQuery } from './share.js';
 import { calibrate, describe as describeRoom } from './calibrate.js';
 import { createScheduler, notifySupport, showNotification } from './notify.js';
 
@@ -9,6 +10,15 @@ const $ = (id) => document.getElementById(id);
 const STORE = 'windowwise:v1';
 
 const state = load() || { place: null, settings: { ...DEFAULT_SETTINGS }, sensitive: false };
+// A shared hostel link sets the place and room settings for this device.
+const shared = fromQuery(location.search);
+if (shared) {
+  state.place = shared.place;
+  state.settings = { ...state.settings, ...shared.settings };
+  state.sensitive = shared.sensitive;
+  history.replaceState(null, '', location.pathname);
+}
+
 let lastHours = null;
 let lastOffset = 0;
 let lastSeries = [];
@@ -243,7 +253,12 @@ function render(hours) {
         </div>`
       : '';
 
+  const printedAt = new Date().toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' });
   $('out').innerHTML = `
+    <header class="print-only print-head">
+      <h1>Window plan: ${esc(place.name)}</h1>
+      <p>From ${clock(first)} for ${plan.length} hours · made ${esc(printedAt)} with WindowWise</p>
+    </header>
     <section class="card now ${now.open ? 'is-open' : 'is-closed'}" aria-labelledby="now-h">
       <p class="where">${esc(place.name)}${place.region ? `, ${esc(place.region)}` : ''} · ${clock(now.time)} local time</p>
       <h2 id="now-h" class="verdict">
@@ -264,6 +279,14 @@ function render(hours) {
 
     <section class="card benefit"><p>${benefit}${fanLine}</p></section>
     ${remindHtml(nextReminder, first)}
+    <section class="card share no-print" aria-labelledby="share-h">
+      <h3 id="share-h">Share with your hostel or flat</h3>
+      <p>Send everyone on your floor the same plan, or print a notice for the noticeboard. The link includes this place and your room settings, never your thermometer readings.</p>
+      <div class="row">
+        <button type="button" data-act="share">Share plan</button>
+        <button type="button" class="ghost" data-act="print">Print notice</button>
+      </div>
+    </section>
     ${airTip}
 
     <section class="card" aria-labelledby="plan-h">
@@ -351,6 +374,19 @@ $('out').addEventListener('click', async (e) => {
     if (!state.remind) status('Notifications were not allowed, so reminders stay off.', true);
   } else if (act === 'remind-off') {
     state.remind = false;
+  } else if (act === 'share' || act === 'print') {
+    if (act === 'print') return window.print();
+    const url = `${location.origin}${location.pathname}?${toQuery(state.place, state.settings, state.sensitive)}`;
+    try {
+      if (navigator.share) await navigator.share({ title: `WindowWise plan for ${state.place.name}`, url });
+      else {
+        await navigator.clipboard.writeText(url);
+        status('Link copied. Paste it into your hostel group chat.');
+      }
+    } catch (err) {
+      if (err?.name !== 'AbortError') status(`Copy this link: ${url}`);
+    }
+    return;
   } else if (act === 'remind-test') {
     const now = lastPlan[0];
     showNotification({ open: now.open, text: `Test reminder. Right now: ${now.text}` }, state.place.name);
