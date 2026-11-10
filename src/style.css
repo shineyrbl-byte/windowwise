@@ -49,7 +49,7 @@ body {
   margin: 0;
   background: var(--bg);
   color: var(--ink);
-  font: 16px/1.5 system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  font: 1rem/1.5 system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
 }
 a { color: var(--accent); }
 h2, h3 { margin: 0 0 0.5rem; line-height: 1.25; }
@@ -253,3 +253,21 @@ input[type='text'] { font: inherit; color: var(--ink); background: var(--bg); bo
 .bt-row .small { margin: 0; }
 
 .top-actions { display: flex; align-items: center; gap: 8px; }
+
+/* display options */
+html.d-large { font-size: 125%; }
+html.d-contrast {
+  --bg: #000; --card: #000; --ink: #fff; --muted: #f0f0f0; --line: #fff;
+  --accent: #ffd400; --accent-ink: #000; --open: #3dff9a; --open-soft: #003d22;
+  --closed: #fff; --closed-soft: #333; --warn: #ffd400; --warn-soft: #332b00;
+  --bad: #ff6b6b; --bad-soft: #400; --out: #ffd400; --shadow: none;
+  color-scheme: dark;
+}
+html.d-contrast .card { border-width: 2px; }
+html.d-contrast a { color: #ffd400; }
+html.d-simple .now .facts,
+html.d-simple .benefit, html.d-simple .remind, html.d-simple .share, html.d-simple .tip,
+html.d-simple #out > section:not(.now):not(.tonight), html.d-simple .calib { display: none !important; }
+html.d-simple .verdict { font-size: clamp(2.2rem, 10vw, 3.4rem); }
+html.d-simple .why, html.d-simple .next { font-size: 1.3rem; }
+.now .small-btn { margin-bottom: 12px; }

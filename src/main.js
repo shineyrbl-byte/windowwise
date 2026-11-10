@@ -257,7 +257,24 @@ function syncForm() {
   $('sensitive').checked = !!state.sensitive;
 }
 
+const DISPLAY = ['simple', 'contrast', 'large'];
+function applyDisplay() {
+  const d = state.display || {};
+  for (const key of DISPLAY) {
+    document.documentElement.classList.toggle(`d-${key}`, !!d[key]);
+    $(key).checked = !!d[key];
+  }
+}
+
 function initSettings() {
+  for (const key of DISPLAY) {
+    $(key).addEventListener('change', (e) => {
+      state.display = { ...(state.display || {}), [key]: e.target.checked };
+      save();
+      applyDisplay();
+    });
+  }
+  applyDisplay();
   for (const key of NUMBER_FIELDS) {
     $(key).addEventListener('change', (e) => {
       const v = e.target.value === '' ? null : Number(e.target.value);
@@ -544,6 +561,7 @@ function render(hours) {
       </h2>
       <p class="why">${esc(reasonText(now))}.</p>
       <p class="next">${next}</p>
+      ${'speechSynthesis' in window ? `<button type="button" class="ghost small-btn no-print" data-act="speak">🔊 ${t('read_aloud')}</button>` : ''}
       <dl class="facts">
         <div><dt>${t('outside')}</dt><dd>${round(now.temp)}°C</dd></div>
         <div><dt>${t('feels')}</dt><dd>${round(now.feels)}°C</dd></div>
@@ -652,6 +670,14 @@ $('out').addEventListener('click', async (e) => {
     if (!state.remind) status('remind_refused', {}, true);
   } else if (act === 'remind-off') {
     state.remind = false;
+  } else if (act === 'speak') {
+    const card = document.querySelector('.now');
+    const text = ['.verdict', '.why', '.next'].map((sel) => card.querySelector(sel)?.textContent.trim()).join(' ');
+    speechSynthesis.cancel();
+    const u = new SpeechSynthesisUtterance(text);
+    u.lang = LOCALES[getLang()] || 'en-IN';
+    speechSynthesis.speak(u);
+    return;
   } else if (act === 'print') {
     window.print();
     return;
